@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node --max-old-space-size=12048 node_modules/webpack-dev-server/bin/webpack-dev-server.js --config webpack.dev.js",
+    "start": "node --max-old-space-size=12048 --openssl-legacy-provider node_modules/webpack-dev-server/bin/webpack-dev-server.js --config webpack.dev.js",
     "start:production": "webpack-dev-server --config webpack.prod.js",
     "serve": "npm run build; node server.js",
     "build": "npm run generate-changelog; webpack --config webpack.prod.js",
