@@ -40,16 +40,6 @@ export default class AppLanguageTab extends SliderSuperTab {
         translated_count: 3852,
         translations_url: 'https://translations.telegram.org/zh-hans/macos/',
       });
-      languages.unshift({
-        _: 'langPackLanguage',
-        name: 'Chinese (Simplified) congcong',
-        native_name: '简体中文 (聪聪)',
-        lang_code: 'zhcncc',
-        plural_code: '',
-        strings_count: 4472,
-        translated_count: 4472,
-        translations_url: 'https://translations.telegram.org/zhcncc/macos/',
-      });
       const random = randomLong();
       languages.forEach((language) => {
         const row = new Row({
