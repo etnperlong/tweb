@@ -248,7 +248,11 @@ namespace I18n {
 		}
 
 		try {
-			pluralRules = new Intl.PluralRules(langPack.lang_code);
+			if(langPack.lang_code === 'zh-hans-raw' || langPack.lang_code === 'zh-hant-raw') {
+				pluralRules = new Intl.PluralRules('zh-CN');
+			} else {
+				pluralRules = new Intl.PluralRules(langPack.lang_code);
+			}
 		} catch(err) {
 			console.error('pluralRules error', err);
 			pluralRules = new Intl.PluralRules(langPack.lang_code.split('-', 1)[0]);
@@ -492,6 +496,9 @@ namespace I18n {
 			safeAssign(this, options);
 	
 			//var options = { month: 'long', day: 'numeric' };
+
+			const langRegex = /^[a-zA-Z]{2}-[a-zA-Z]{2}$/
+			const localeCode = lastRequestedLangCode.match(langRegex) ? lastRequestedLangCode : 'zh-CN';
 			
 			// * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Locale/hourCycle#adding_an_hour_cycle_via_the_locale_string
 			const dateTimeFormat = getDateTimeFormat(this.options);

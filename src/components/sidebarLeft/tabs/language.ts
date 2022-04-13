@@ -28,9 +28,23 @@ export default class AppLanguageTab extends SliderSuperTab {
       // Push Unofficial TW/CN Languages
       languages.unshift({
         _: 'langPackLanguage',
+        name: 'Chinese (Traditional)',
+        native_name: '繁體中文 (Beta)',
+        lang_code: 'zh-hant-raw',
+        pFlags: {
+          beta: true,
+          official: true,
+        },
+        plural_code: '',
+        strings_count: 3852,
+        translated_count: 3852,
+        translations_url: 'https://translations.telegram.org/zh-hant/macos/',
+      });
+      languages.unshift({
+        _: 'langPackLanguage',
         name: 'Chinese (Simplified)',
         native_name: '简体中文 (Beta)',
-        lang_code: 'zh-hans',
+        lang_code: 'zh-hans-raw',
         pFlags: {
           beta: true,
           official: true,
