@@ -478,7 +478,9 @@ namespace I18n {
     let json = JSON.stringify(options);
     let dateTimeFormat = cachedDateTimeFormats.get(json);
     if(!dateTimeFormat) {
-      cachedDateTimeFormats.set(json, dateTimeFormat = new Intl.DateTimeFormat(lastRequestedLangCode + '-u-hc-' + timeFormat, options));
+	  const langRegex = /^[a-zA-Z]{2}-[a-zA-Z]{2}$/
+	  const localeCode = lastRequestedLangCode.match(langRegex) ? lastRequestedLangCode : 'zh-CN';
+      cachedDateTimeFormats.set(json, dateTimeFormat = new Intl.DateTimeFormat(localeCode + '-u-hc-' + timeFormat, options));
     }
 
     return dateTimeFormat;
@@ -496,9 +498,6 @@ namespace I18n {
 			safeAssign(this, options);
 	
 			//var options = { month: 'long', day: 'numeric' };
-
-			const langRegex = /^[a-zA-Z]{2}-[a-zA-Z]{2}$/
-			const localeCode = lastRequestedLangCode.match(langRegex) ? lastRequestedLangCode : 'zh-CN';
 			
 			// * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Locale/hourCycle#adding_an_hour_cycle_via_the_locale_string
 			const dateTimeFormat = getDateTimeFormat(this.options);
