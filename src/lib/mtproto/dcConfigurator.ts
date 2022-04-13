@@ -63,7 +63,7 @@ export class DcConfigurator {
   private transportSocket = (dcId: DcId, connectionType: ConnectionType, suffix: string) => {
     const path = 'apiws' + TEST_SUFFIX;
     // const chosenServer = `wss://${App.suffix.toLowerCase()}ws${dcId}${suffix}.web.telegram.org/${path}`;
-    const chosenServer = `wss://proud-weasel-54.deno.dev/${App.suffix.toLowerCase()}ws${dcId}${suffix}/${path}`
+    const chosenServer = `wss://tg-edge.deno.dev/${App.suffix.toLowerCase()}ws${dcId}${suffix}/${path}`
     const logSuffix = connectionType === 'upload' ? '-U' : connectionType === 'download' ? '-D' : '';
 
     const retryTimeout = connectionType === 'client' ? 10000 : 10000;
@@ -80,7 +80,7 @@ export class DcConfigurator {
     if(Modes.ssl || !Modes.http) {
       const subdomain = this.sslSubdomains[dcId - 1] + (connectionType !== 'client' ? '-1' : '');
       const path = Modes.test ? 'apiw_test1' : 'apiw1';
-      chosenServer = 'https://proud-weasel-54.deno.dev/' + subdomain + '/' + path;
+      chosenServer = 'https://tg-edge.deno.dev/' + subdomain + '/' + path;
       // chosenServer = 'https://' + subdomain + '.web.telegram.org/' + path;
     } else {
       for(let dcOption of this.dcOptions) {
