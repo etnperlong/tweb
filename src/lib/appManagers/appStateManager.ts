@@ -122,6 +122,43 @@ export type State = {
   notifySettings: {[k in Exclude<NotifyPeer['_'], 'notifyPeer'>]?: PeerNotifySettings.peerNotifySettings}
 };
 
+const BACKGROUND_DAY_DESKTOP: Background = {
+  blur: false,
+  slug: 'pattern',
+  color: '#dbddbb,#6ba587,#d5d88d,#88b884',
+  highlightningColor: 'hsla(86.4, 43.846153%, 45.117647%, .4)',
+  intensity: 50,
+  id: '1'
+};
+
+const BACKGROUND_DAY_MOBILE: Background = {
+  blur: false,
+  slug: '',
+  color: '#dbddbb,#6ba587,#d5d88d,#88b884',
+  highlightningColor: 'hsla(86.4, 43.846153%, 45.117647%, .4)',
+  intensity: 0,
+  id: '1'
+};
+
+const BACKGROUND_NIGHT_DESKTOP: Background = {
+  blur: false,
+  slug: 'pattern',
+  // color: '#dbddbb,#6ba587,#d5d88d,#88b884',
+  color: '#fec496,#dd6cb9,#962fbf,#4f5bd5',
+  highlightningColor: 'hsla(299.142857, 44.166666%, 37.470588%, .4)',
+  intensity: -50,
+  id: '-1'
+};
+
+const BACKGROUND_NIGHT_MOBILE: Background = {
+  blur: false,
+  slug: '',
+  color: '#0f0f0f',
+  highlightningColor: 'hsla(0, 0%, 3.82353%, 0.4)',
+  intensity: 0,
+  id: '-1'
+};
+
 export const STATE_INIT: State = {
   allDialogsLoaded: {},
   pinnedOrders: {},
@@ -189,25 +226,10 @@ export const STATE_INIT: State = {
     },
     themes: [{
       name: 'day',
-      background: {
-        blur: false,
-        slug: 'pattern',
-        color: '#dbddbb,#6ba587,#d5d88d,#88b884',
-        highlightningColor: 'hsla(86.4, 43.846153%, 45.117647%, .4)',
-        intensity: 50,
-        id: '1'
-      }
+      background: IS_MOBILE ? BACKGROUND_DAY_MOBILE : BACKGROUND_DAY_DESKTOP
     }, {
       name: 'night',
-      background: {
-        blur: false,
-        slug: 'pattern',
-        // color: '#dbddbb,#6ba587,#d5d88d,#88b884',
-        color: '#fec496,#dd6cb9,#962fbf,#4f5bd5',
-        highlightningColor: 'hsla(299.142857, 44.166666%, 37.470588%, .4)',
-        intensity: -50,
-        id: '-1'
-      }
+      background: IS_MOBILE ? BACKGROUND_NIGHT_MOBILE : BACKGROUND_NIGHT_DESKTOP
     }],
     theme: 'system',
     notifications: {
