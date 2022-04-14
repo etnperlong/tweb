@@ -1,0 +1,33 @@
+name: Build TWeb (Enhanced)
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'     
+        required: false
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    name: Build with NodeJS 16 (lts/gallium)
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Setup node environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+      - name: Install package
+        run: npm install
+      - name: Build
+        run: npm run build
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug_enabled }}
