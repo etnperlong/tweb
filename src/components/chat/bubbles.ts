@@ -34,7 +34,7 @@ import mediaSizes from "../../helpers/mediaSizes";
 import { IS_ANDROID, IS_APPLE, IS_MOBILE, IS_SAFARI } from "../../environment/userAgent";
 import I18n, { FormatterArguments, i18n, langPack, LangPackKey, UNSUPPORTED_LANG_PACK_KEY, _i18n } from "../../lib/langPack";
 import AvatarElement from "../avatar";
-import { ripple } from "../ripple";
+import ripple from "../ripple";
 import { wrapAlbum, wrapPhoto, wrapVideo, wrapDocument, wrapSticker, wrapPoll, wrapGroupedDocuments } from "../wrappers";
 import { MessageRender } from "./messageRender";
 import LazyLoadQueue from "../lazyLoadQueue";
@@ -46,7 +46,7 @@ import { NULL_PEER_ID, REPLIES_PEER_ID } from "../../lib/mtproto/mtproto_config"
 import { FocusDirection, ScrollStartCallbackDimensions } from "../../helpers/fastSmoothScroll";
 import useHeavyAnimationCheck, { getHeavyAnimationPromise, dispatchHeavyAnimationEvent, interruptHeavyAnimation } from "../../hooks/useHeavyAnimationCheck";
 import { fastRaf, fastRafPromise } from "../../helpers/schedulers";
-import { deferredPromise } from "../../helpers/cancellablePromise";
+import deferredPromise from "../../helpers/cancellablePromise";
 import RepliesElement from "./replies";
 import DEBUG from "../../config/debug";
 import { SliceEnd } from "../../helpers/slicedArray";
@@ -54,10 +54,10 @@ import serverTimeManager from "../../lib/mtproto/serverTimeManager";
 import PeerTitle from "../peerTitle";
 import findUpClassName from "../../helpers/dom/findUpClassName";
 import findUpTag from "../../helpers/dom/findUpTag";
-import { toast } from "../toast";
+import { toast, toastNew } from "../toast";
 import { getElementByPoint } from "../../helpers/dom/getElementByPoint";
 import { getMiddleware } from "../../helpers/middleware";
-import { cancelEvent } from "../../helpers/dom/cancelEvent";
+import cancelEvent from "../../helpers/dom/cancelEvent";
 import { attachClickEvent, simulateClickEvent } from "../../helpers/dom/clickEvent";
 import htmlToDocumentFragment from "../../helpers/dom/htmlToDocumentFragment";
 import positionElementByIndex from "../../helpers/dom/positionElementByIndex";
@@ -89,7 +89,7 @@ import ReactionsElement, { REACTIONS_ELEMENTS } from "./reactions";
 import type ReactionElement from "./reaction";
 import type { AppReactionsManager } from "../../lib/appManagers/appReactionsManager";
 import RLottiePlayer from "../../lib/rlottie/rlottiePlayer";
-import { pause } from "../../helpers/schedulers/pause";
+import pause from "../../helpers/schedulers/pause";
 import ScrollSaver from "../../helpers/scrollSaver";
 import getObjectKeysAndSort from "../../helpers/object/getObjectKeysAndSort";
 import forEachReverse from "../../helpers/array/forEachReverse";
@@ -98,6 +98,10 @@ import findAndSplice from "../../helpers/array/findAndSplice";
 import getViewportSlice from "../../helpers/dom/getViewportSlice";
 import SuperIntersectionObserver from "../../helpers/dom/superIntersectionObserver";
 import generateFakeIcon from "../generateFakeIcon";
+import selectElementContents from "../../helpers/dom/selectElementContents";
+import cancelSelection from "../../helpers/dom/cancelSelection";
+import SelectionSaver from "../../helpers/selectionSaver";
+import copyFromElement from "../../helpers/dom/copyFromElement";
 
 const USE_MEDIA_TAILS = false;
 const IGNORE_ACTIONS: Set<Message.messageService['action']['_']> = new Set([
@@ -631,6 +635,16 @@ export default class ChatBubbles {
 
     attachClickEvent(this.scrollable.container, this.onBubblesClick, {listenerSetter: this.listenerSetter});
     // this.listenerSetter.add(this.bubblesContainer)('click', this.onBubblesClick/* , {capture: true, passive: false} */);
+
+    this.listenerSetter.add(this.scrollable.container)('mousedown', (e) => {
+      const code: HTMLElement = findUpTag(e.target, 'CODE');
+      if(code) {
+        cancelEvent(e);
+        copyFromElement(code);
+        toastNew({langPackKey: 'TextCopied'});
+        return;
+      }
+    });
 
     if(DEBUG) {
       this.listenerSetter.add(this.bubblesContainer)('dblclick', (e) => {
@@ -2659,6 +2673,10 @@ export default class ChatBubbles {
       const afterSetPromise = Promise.all([setPeerPromise, getHeavyAnimationPromise()]);
       afterSetPromise.then(() => { // check whether list isn't full
         scrollable.checkForTriggers();
+
+        if(cached) {
+          this.onRenderScrollSet();
+        }
       });
 
       this.chat.dispatchEvent('setPeer', lastMsgId, !isJump);
@@ -3390,6 +3408,9 @@ export default class ChatBubbles {
             preview.classList.add('preview');
             previewResizer.append(preview);
           }
+
+          let quoteTextDiv = document.createElement('div');
+          quoteTextDiv.classList.add('quote-text');
           
           const doc = webpage.document as MyDocument;
           if(doc) {
@@ -3422,18 +3443,23 @@ export default class ChatBubbles {
                 autoDownloadSize: this.chat.autoDownload.file,
                 lazyLoadQueue: this.lazyLoadQueue,
                 loadPromises,
-                sizeType: 'documentName'
+                sizeType: 'documentName',
+                searchContext: {
+                  useSearch: false,
+                  peerId: this.peerId,
+                  inputFilter: {
+                    _: 'inputMessagesFilterEmpty'
+                  }
+                }
               });
               preview.append(docDiv);
               preview.classList.add('preview-with-document');
+              quoteTextDiv.classList.add('has-document');
               //messageDiv.classList.add((webpage.type || 'document') + '-message');
               //doc = null;
             }
           }
           
-          let quoteTextDiv = document.createElement('div');
-          quoteTextDiv.classList.add('quote-text');
-
           if(previewResizer) {
             quoteTextDiv.append(previewResizer);
           }
@@ -4055,18 +4081,20 @@ export default class ChatBubbles {
     } */
 
     let scrollSaver: ScrollSaver, hadScroll: boolean/* , viewportSlice: ReturnType<ChatBubbles['getViewportSlice']> */;
-    this.messagesQueueOnRender = () => {
-      scrollSaver = new ScrollSaver(this.scrollable, reverse);
-      
-      if(this.getRenderedLength() && !this.chat.setPeerPromise) {
-        const viewportSlice = this.getViewportSlice();
-        this.deleteViewportSlice(viewportSlice, true);
-      }
-      
-      scrollSaver.save();
-      const saved = scrollSaver.getSaved();
-      hadScroll = saved.scrollHeight !== saved.clientHeight;
-    };
+    if(this.chatInner.parentElement) {
+      this.messagesQueueOnRender = () => {
+        scrollSaver = new ScrollSaver(this.scrollable, reverse);
+        
+        if(this.getRenderedLength() && !this.chat.setPeerPromise) {
+          const viewportSlice = this.getViewportSlice();
+          this.deleteViewportSlice(viewportSlice, true);
+        }
+        
+        scrollSaver.save();
+        const saved = scrollSaver.getSaved();
+        hadScroll = saved.scrollHeight !== saved.clientHeight;
+      };
+    }
 
     if(this.needReflowScroll) {
       reflowScrollableElement(this.scrollable.container);
@@ -4114,12 +4142,26 @@ export default class ChatBubbles {
 
     if(scrollSaver) {
       scrollSaver.restore(history.length === 1 && !reverse ? false : true);
+      this.onRenderScrollSet(scrollSaver.getSaved());
+    }
 
-      const className = 'has-sticky-dates';
-      const state = scrollSaver.getSaved();
+    return true;
+  }
+
+  private onRenderScrollSet(state?: {scrollHeight: number, clientHeight: number}) {
+    const className = 'has-sticky-dates';
+    if(!this.bubblesContainer.classList.contains(className)) {
       const isLoading = !this.preloader.detached;
-      const hasScroll = state.scrollHeight !== state.clientHeight;
-      if((hasScroll || isLoading) && !this.bubblesContainer.classList.contains(className)) {
+
+      if(isLoading || 
+        (
+          state ??= {
+            scrollHeight: this.scrollable.scrollHeight,
+            clientHeight: this.scrollable.container.clientHeight
+          }, 
+          state.scrollHeight !== state.clientHeight
+        )
+      ) {
         /* for(const timestamp in this.dateMessages) {
           const dateMessage = this.dateMessages[timestamp];
           dateMessage.div.classList.add('is-sticky');
@@ -4136,12 +4178,12 @@ export default class ChatBubbles {
         } else {
           setTimeout(callback, 600);
         }
-      } else {
-        this.willScrollOnLoad = undefined;
+
+        return;
       }
     }
-
-    return true;
+    
+    this.willScrollOnLoad = undefined;
   }
 
   onDatePick = (timestamp: number) => {

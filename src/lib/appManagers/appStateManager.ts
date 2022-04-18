@@ -5,11 +5,12 @@
  */
 
 import type { Dialog } from './appMessagesManager';
-import { NULL_PEER_ID, UserAuth } from '../mtproto/mtproto_config';
 import type { MyTopPeer, TopPeerType, User } from './appUsersManager';
 import type { AuthState } from '../../types';
 import type FiltersStorage from '../storages/filters';
 import type DialogsStorage from '../storages/dialogs';
+import type { AppMediaPlaybackController } from '../../components/appMediaPlaybackController';
+import { NULL_PEER_ID, UserAuth } from '../mtproto/mtproto_config';
 import EventListenerBase from '../../helpers/eventListenerBase';
 import rootScope from '../rootScope';
 import stateStorage from '../stateStorage';
@@ -116,6 +117,7 @@ export type State = {
     nightTheme?: boolean, // ! DEPRECATED
     timeFormat: 'h12' | 'h23'
   },
+  playbackParams: ReturnType<AppMediaPlaybackController['getPlaybackParams']>,
   keepSigned: boolean,
   chatContextMenuHintWasShown: boolean,
   stateId: number,
@@ -237,6 +239,18 @@ export const STATE_INIT: State = {
     },
     timeFormat: getTimeFormat()
   },
+  playbackParams: {
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    playbackRates: {
+      voice: 1,
+      video: 1,
+      audio: 1
+    },
+    loop: false,
+    round: false
+  },
   keepSigned: true,
   chatContextMenuHintWasShown: false,
   stateId: nextRandomUint(32),
@@ -281,6 +295,7 @@ export class AppStateManager extends EventListenerBase<{
   public storage = stateStorage;
 
   public newVersion: string;
+  public oldVersion: string;
 
   constructor() {
     super();
@@ -566,6 +581,7 @@ export class AppStateManager extends EventListenerBase<{
           
           if(compareVersion(state.version, STATE_VERSION) !== 0) {
             this.newVersion = STATE_VERSION;
+            this.oldVersion = state.version;
           }
 
           this.pushToState('version', STATE_VERSION);

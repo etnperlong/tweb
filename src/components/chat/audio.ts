@@ -11,16 +11,17 @@ import appMediaPlaybackController, { AppMediaPlaybackController } from "../appMe
 import DivAndCaption from "../divAndCaption";
 import PinnedContainer from "./pinnedContainer";
 import Chat from "./chat";
-import { cancelEvent } from "../../helpers/dom/cancelEvent";
+import cancelEvent from "../../helpers/dom/cancelEvent";
 import { attachClickEvent } from "../../helpers/dom/clickEvent";
 import replaceContent from "../../helpers/dom/replaceContent";
 import PeerTitle from "../peerTitle";
 import { i18n } from "../../lib/langPack";
 import { formatFullSentTime } from "../../helpers/date";
-import { MediaProgressLine, VolumeSelector } from "../../lib/mediaPlayer";
 import ButtonIcon from "../buttonIcon";
 import { MyDocument } from "../../lib/appManagers/appDocsManager";
 import { Message } from "../../layer";
+import MediaProgressLine from "../mediaProgressLine";
+import VolumeSelector from "../volumeSelector";
 
 export default class ChatAudio extends PinnedContainer {
   private toggleEl: HTMLElement;
@@ -147,11 +148,7 @@ export default class ChatAudio extends PinnedContainer {
     this.toggle(true);
   };
   
-  private onMediaPlay = ({doc, message, media}: {
-    doc: MyDocument,
-    message: Message.message,
-    media: HTMLMediaElement
-  }) => {
+  private onMediaPlay = ({doc, message, media, playbackParams}: ReturnType<AppMediaPlaybackController['getPlayingDetails']>) => {
     let title: string | HTMLElement, subtitle: string | HTMLElement | DocumentFragment;
     const isMusic = doc.type !== 'voice' && doc.type !== 'round';
     if(!isMusic) {
@@ -166,6 +163,9 @@ export default class ChatAudio extends PinnedContainer {
 
     this.fasterEl.classList.toggle('hide', isMusic);
     this.repeatEl.classList.toggle('hide', !isMusic);
+
+    this.onPlaybackParams(playbackParams);
+    this.volumeSelector.setVolume();
 
     this.progressLine.setMedia(media);
 

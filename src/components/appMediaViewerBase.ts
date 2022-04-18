@@ -4,7 +4,7 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
-import { deferredPromise } from "../helpers/cancellablePromise";
+import deferredPromise from "../helpers/cancellablePromise";
 import mediaSizes from "../helpers/mediaSizes";
 import { IS_TOUCH_SUPPORTED } from "../environment/touchSupport";
 import { IS_MOBILE_SAFARI, IS_SAFARI } from "../environment/userAgent";
@@ -14,7 +14,7 @@ import { logger } from "../lib/logger";
 import VideoPlayer from "../lib/mediaPlayer";
 import rootScope from "../lib/rootScope";
 import animationIntersector from "./animationIntersector";
-import appMediaPlaybackController from "./appMediaPlaybackController";
+import appMediaPlaybackController, { AppMediaPlaybackController } from "./appMediaPlaybackController";
 import AvatarElement from "./avatar";
 import ButtonIcon from "./buttonIcon";
 import { ButtonMenuItemOptions } from "./buttonMenu";
@@ -23,13 +23,13 @@ import { LazyLoadQueueBase } from "./lazyLoadQueue";
 import ProgressivePreloader from "./preloader";
 import SwipeHandler from "./swipeHandler";
 import { formatFullSentTime } from "../helpers/date";
-import appNavigationController from "./appNavigationController";
+import appNavigationController, { NavigationItem } from "./appNavigationController";
 import { Message } from "../layer";
 import findUpClassName from "../helpers/dom/findUpClassName";
 import renderImageFromUrl, { renderImageFromUrlPromise } from "../helpers/dom/renderImageFromUrl";
 import getVisibleRect from "../helpers/dom/getVisibleRect";
 import appDownloadManager from "../lib/appManagers/appDownloadManager";
-import { cancelEvent } from "../helpers/dom/cancelEvent";
+import cancelEvent from "../helpers/dom/cancelEvent";
 import fillPropertyValue from "../helpers/fillPropertyValue";
 import generatePathData from "../helpers/generatePathData";
 import replaceContent from "../helpers/dom/replaceContent";
@@ -44,6 +44,8 @@ import RichTextProcessor from "../lib/richtextprocessor";
 import { NULL_PEER_ID } from "../lib/mtproto/mtproto_config";
 import { isFullScreen } from "../helpers/dom/fullScreen";
 import { attachClickEvent } from "../helpers/dom/clickEvent";
+import SearchListLoader from "../helpers/searchListLoader";
+import createVideo from "../helpers/dom/createVideo";
 
 const ZOOM_STEP = 0.5;
 const ZOOM_INITIAL_VALUE = 1;
@@ -114,6 +116,8 @@ export default class AppMediaViewerBase<
   protected zoomSwipeY = 0;
   
   protected ctrlKeyDown: boolean;
+  protected releaseSingleMedia: ReturnType<AppMediaPlaybackController['setSingleMedia']>;
+  protected navigationItem: NavigationItem;
 
   get target() {
     return this.listLoader.current;
@@ -419,21 +423,20 @@ export default class AppMediaViewerBase<
 
     if(this.setMoverAnimationPromise) return Promise.reject();
 
-    appNavigationController.removeByType('media');
+    if(this.navigationItem) {
+      appNavigationController.removeItem(this.navigationItem);
+    }
 
     this.lazyLoadQueue.clear();
 
     const promise = this.setMoverToTarget(this.target?.element, true).then(({onAnimationEnd}) => onAnimationEnd);
 
     this.listLoader.reset();
-    (this.listLoader as any).cleanup && (this.listLoader as any).cleanup();
+    (this.listLoader as SearchListLoader<any>).cleanup && (this.listLoader as SearchListLoader<any>).cleanup();
     this.setMoverPromise = null;
     this.tempId = -1;
-    (window as any).appMediaViewer = undefined;
-
-    if(this.zoomSwipeHandler) {
-      this.zoomSwipeHandler.removeListeners();
-      this.zoomSwipeHandler = undefined;
+    if((window as any).appMediaViewer === this) {
+      (window as any).appMediaViewer = undefined;
     }
 
     /* if(appSidebarRight.historyTabIDs.slice(-1)[0] === AppSidebarRight.SLIDERITEMSIDS.forward) {
@@ -442,17 +445,46 @@ export default class AppMediaViewerBase<
       });
     } */
 
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
-    window.removeEventListener('wheel', this.onWheel, {capture: true});
+    this.removeGlobalListeners();
+
+    this.zoomSwipeHandler = undefined;
 
     promise.finally(() => {
       this.wholeDiv.remove();
-      rootScope.isOverlayActive = false;
-      animationIntersector.checkAnimations(false);
+      this.toggleOverlay(false);
     });
 
     return promise;
+  }
+
+  protected toggleOverlay(active: boolean) {
+    rootScope.isOverlayActive = active;
+    animationIntersector.checkAnimations(active);
+  }
+
+  protected toggleGlobalListeners(active: boolean) {
+    if(active) this.setGlobalListeners();
+    else this.removeGlobalListeners();
+  }
+
+  protected removeGlobalListeners() {
+    if(this.zoomSwipeHandler) {
+      this.zoomSwipeHandler.removeListeners();
+    }
+
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('wheel', this.onWheel, {capture: true});
+  }
+
+  protected setGlobalListeners() {
+    if(this.isZooming()) {
+      this.zoomSwipeHandler.setListeners();
+    }
+
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    if(!IS_TOUCH_SUPPORTED) window.addEventListener('wheel', this.onWheel, {passive: false, capture: true});
   }
 
   onClick = (e: MouseEvent) => {
@@ -770,7 +802,7 @@ export default class AppMediaViewerBase<
         mediaElement = new Image();
         src = target.src;
       } else if(target instanceof HTMLVideoElement) {
-        mediaElement = document.createElement('video');
+        mediaElement = createVideo();
         mediaElement.src = target.src;
       } else if(target instanceof SVGSVGElement) {
         const clipId = target.dataset.clipId;
@@ -878,10 +910,7 @@ export default class AppMediaViewerBase<
         mover.classList.add('hiding');
       }
 
-      this.wholeDiv.classList.add('backwards');
-      setTimeout(() => {
-        this.wholeDiv.classList.remove('active');
-      }, 0);
+      this.toggleWholeActive(false);
 
       //return ret;
 
@@ -967,6 +996,17 @@ export default class AppMediaViewerBase<
     }
 
     return ret;
+  }
+
+  protected toggleWholeActive(active: boolean) {
+    if(active) {
+      this.wholeDiv.classList.add('active');
+    } else {
+      this.wholeDiv.classList.add('backwards');
+      setTimeout(() => {
+        this.wholeDiv.classList.remove('active');
+      }, 0);
+    }
   }
 
   protected setFullAspect(aspecter: HTMLDivElement, containerRect: DOMRect, rect: DOMRect) {
@@ -1209,18 +1249,18 @@ export default class AppMediaViewerBase<
       this.moveTheMover(this.content.mover, fromRight === 1);
       this.setNewMover();
     } else {
-      rootScope.isOverlayActive = true;
-      window.addEventListener('keydown', this.onKeyDown);
-      window.addEventListener('keyup', this.onKeyUp);
-      if(!IS_TOUCH_SUPPORTED) window.addEventListener('wheel', this.onWheel, {passive: false, capture: true});
-      const mainColumns = document.getElementById('main-columns');
-      this.pageEl.insertBefore(this.wholeDiv, mainColumns);
-      void this.wholeDiv.offsetLeft; // reflow
-      this.wholeDiv.classList.add('active');
-      animationIntersector.checkAnimations(true);
+      this.toggleOverlay(true);
+      this.setGlobalListeners();
+
+      if(!this.wholeDiv.parentElement) {
+        this.pageEl.insertBefore(this.wholeDiv, document.getElementById('main-columns'));
+        void this.wholeDiv.offsetLeft; // reflow
+      }
+
+      this.toggleWholeActive(true);
 
       if(!IS_MOBILE_SAFARI) {
-        appNavigationController.pushItem({
+        this.navigationItem = {
           type: 'media',
           onPop: (canAnimate) => {
             if(this.setMoverAnimationPromise) {
@@ -1229,7 +1269,9 @@ export default class AppMediaViewerBase<
             
             this.close();
           }
-        });
+        };
+
+        appNavigationController.pushItem(this.navigationItem);
       }
     }
 
@@ -1285,7 +1327,7 @@ export default class AppMediaViewerBase<
       const useController = message && media.type !== 'gif';
       const video = /* useController ? 
         appMediaPlaybackController.addMedia(message, false, true) as HTMLVideoElement : 
-         */document.createElement('video');
+         */createVideo({pip: useController});
 
       const set = () => this.setMoverToTarget(target, false, fromRight).then(({onAnimationEnd}) => {
       //return; // set and don't move
@@ -1366,6 +1408,43 @@ export default class AppMediaViewerBase<
                 streamable: supportsStreaming,
                 onPlaybackRackMenuToggle: (open) => {
                   this.wholeDiv.classList.toggle('hide-caption', !!open);
+                },
+                onPip: (pip) => {
+                  if(!pip && (window as any).appMediaViewer !== this) {
+                    this.releaseSingleMedia = undefined;
+                    this.close();
+                    return;
+                  }
+
+                  const mover = this.moversContainer.lastElementChild as HTMLElement;
+                  mover.classList.toggle('hiding', pip);
+                  this.toggleWholeActive(!pip);
+                  this.toggleOverlay(!pip);
+                  this.toggleGlobalListeners(!pip);
+
+                  if(this.navigationItem) {
+                    if(pip) appNavigationController.removeItem(this.navigationItem);
+                    else appNavigationController.pushItem(this.navigationItem);
+                  }
+
+                  if(useController) {
+                    if(pip) {
+                      // appMediaPlaybackController.toggleSwitchers(true);
+
+                      this.releaseSingleMedia(false);
+                      this.releaseSingleMedia = undefined;
+
+                      appMediaPlaybackController.setPictureInPicture(video);
+                    } else {
+                      this.releaseSingleMedia = appMediaPlaybackController.setSingleMedia(video, message as Message.message);
+                    }
+                  }
+                },
+                onPipClose: () => {
+                  // this.target = undefined;
+                  // this.toggleWholeActive(false);
+                  // this.toggleOverlay(false);
+                  this.close();
                 }
               });
               player.addEventListener('toggleControls', (show) => {
@@ -1374,7 +1453,7 @@ export default class AppMediaViewerBase<
 
               this.addEventListener('setMoverBefore', () => {
                 this.wholeDiv.classList.remove('has-video-controls');
-                this.videoPlayer.removeListeners();
+                this.videoPlayer.cleanup();
                 this.videoPlayer = undefined;
               }, {once: true});
 
@@ -1465,10 +1544,13 @@ export default class AppMediaViewerBase<
               // * have to set options (especially playbackRate) after src
               // * https://github.com/videojs/video.js/issues/2516
               if(useController) {
-                const rollback = appMediaPlaybackController.setSingleMedia(video, message as Message.message);
+                this.releaseSingleMedia = appMediaPlaybackController.setSingleMedia(video, message as Message.message);
 
                 this.addEventListener('setMoverBefore', () => {
-                  rollback();
+                  if(this.releaseSingleMedia) {
+                    this.releaseSingleMedia();
+                    this.releaseSingleMedia = undefined;
+                  }
                 }, {once: true});
               }
 

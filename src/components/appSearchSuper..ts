@@ -18,7 +18,7 @@ import { SearchGroup, SearchGroupType } from "./appSearch";
 import { horizontalMenu } from "./horizontalMenu";
 import LazyLoadQueue from "./lazyLoadQueue";
 import { attachContextMenuListener, openBtnMenu, positionMenu, putPreloader } from "./misc";
-import { ripple } from "./ripple";
+import ripple from "./ripple";
 import Scrollable, { ScrollableX } from "./scrollable";
 import { wrapDocument, wrapPhoto, wrapVideo } from "./wrappers";
 import useHeavyAnimationCheck, { getHeavyAnimationPromise } from "../hooks/useHeavyAnimationCheck";
@@ -44,7 +44,7 @@ import PopupDeleteMessages from "./popups/deleteMessages";
 import Row from "./row";
 import htmlToDocumentFragment from "../helpers/dom/htmlToDocumentFragment";
 import { SearchSelection } from "./chat/selection";
-import { cancelEvent } from "../helpers/dom/cancelEvent";
+import cancelEvent from "../helpers/dom/cancelEvent";
 import { attachClickEvent, simulateClickEvent } from "../helpers/dom/clickEvent";
 import { MyDocument } from "../lib/appManagers/appDocsManager";
 import AppMediaViewer from "./appMediaViewer";
@@ -570,108 +570,7 @@ export default class AppSearchSuper {
   };
 
   public filterMessagesByType(messages: any[], type: SearchSuperType): MyMessage[] {
-    if(type === 'inputMessagesFilterEmpty') return messages;
-
-    if(type !== 'inputMessagesFilterUrl') {
-      messages = messages.filter(message => !!message.media);
-    }
-
-    /* if(!this.peerId) {
-      messages = messages.filter(message => {
-        if(message.peerId === rootScope.myId) {
-          return true;
-        }
-
-        const dialog = appMessagesManager.getDialogByPeerId(message.fromId)[0];
-        return dialog && dialog.folder_id === 0;
-      });
-    } */
-
-    let filtered: any[] = [];
-
-    switch(type) {
-      case 'inputMessagesFilterPhotoVideo': {
-        for(let message of messages) {
-          let media = message.media.photo || message.media.document || (message.media.webpage && message.media.webpage.document);
-          if(!media) {
-            //this.log('no media!', message);
-            continue;
-          }
-          
-          if(media._ === 'document' && media.type !== 'video'/*  && media.type !== 'gif' */) {
-            //this.log('broken video', media);
-            continue;
-          }
-
-          filtered.push(message);
-        }
-        
-        break;
-      }
-
-      case 'inputMessagesFilterDocument': {
-        for(let message of messages) {
-          if(!message.media.document || ['voice', 'audio', 'gif', 'sticker', 'round'].includes(message.media.document.type)) {
-            continue;
-          }
-          
-          filtered.push(message);
-        }
-        break;
-      }
-
-      case 'inputMessagesFilterUrl': {
-        //this.log('inputMessagesFilterUrl', messages);
-        for(let message of messages) {
-          //if((message.media.webpage && message.media.webpage._ !== 'webPageEmpty')) {
-            filtered.push(message);
-          //}
-        }
-        
-        break;
-      }
-
-      case 'inputMessagesFilterMusic': {
-        for(let message of messages) {
-          if(!message.media.document || message.media.document.type !== 'audio') {
-            continue;
-          }
-
-          filtered.push(message);
-        }
-
-        break;
-      }
-
-      case 'inputMessagesFilterVoice': {
-        for(let message of messages) {
-          if(!message.media.document || message.media.document.type !== 'voice') {
-            continue;
-          }
-
-          filtered.push(message);
-        }
-
-        break;
-      }
-
-      case 'inputMessagesFilterRoundVoice': {
-        for(let message of messages) {
-          if(!message.media.document || !(['voice', 'round'] as MyDocument['type'][]).includes(message.media.document.type)) {
-            continue;
-          }
-
-          filtered.push(message);
-        }
-
-        break;
-      }
-
-      default:
-        break;
-    }
-
-    return filtered;
+    return appMessagesManager.filterMessagesByInputFilter(type, messages, messages.length);
   }
 
   private processEmptyFilter({message, searchGroup}: ProcessSearchSuperResult) {

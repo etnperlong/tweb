@@ -50,7 +50,7 @@ import { generateTail } from './bubbles';
 import findUpClassName from '../../helpers/dom/findUpClassName';
 import ButtonCorner from '../buttonCorner';
 import blurActiveElement from '../../helpers/dom/blurActiveElement';
-import { cancelEvent } from '../../helpers/dom/cancelEvent';
+import cancelEvent from '../../helpers/dom/cancelEvent';
 import cancelSelection from '../../helpers/dom/cancelSelection';
 import { attachClickEvent, simulateClickEvent } from '../../helpers/dom/clickEvent';
 import getRichValue from '../../helpers/dom/getRichValue';
@@ -1711,14 +1711,16 @@ export default class ChatInput {
   };
 
   public applyMarkdown(type: MarkdownType, href?: string) {
+    const MONOSPACE_FONT = 'var(--font-monospace)';
+    const SPOILER_FONT = 'spoiler';
     const commandsMap: Partial<{[key in typeof type]: string | (() => void)}> = {
       bold: 'Bold',
       italic: 'Italic',
       underline: 'Underline',
       strikethrough: 'Strikethrough',
-      monospace: () => document.execCommand('fontName', false, 'monospace'),
+      monospace: () => document.execCommand('fontName', false, MONOSPACE_FONT),
       link: href ? () => document.execCommand('createLink', false, href) : () => document.execCommand('unlink', false, null),
-      spoiler: () => document.execCommand('fontName', false, 'spoiler')
+      spoiler: () => document.execCommand('fontName', false, SPOILER_FONT)
     };
 
     if(!commandsMap[type]) {
@@ -1787,7 +1789,7 @@ export default class ChatInput {
       //executed.push(document.execCommand('removeFormat', false, null));
 
       if(haveThisType) {
-        executed.push(document.execCommand('fontName', false, 'Roboto'));
+        executed.push(this.resetCurrentFormatting());
       } else {
         executed.push(typeof(command) === 'function' ? command() : document.execCommand(command, false, null));
       }
@@ -1804,6 +1806,10 @@ export default class ChatInput {
     }
 
     return true;
+  }
+
+  private resetCurrentFormatting() {
+    return document.execCommand('fontName', false, 'Roboto');
   }
 
   private handleMarkdownShortcut = (e: KeyboardEvent) => {
@@ -1955,6 +1961,18 @@ export default class ChatInput {
 
       if(this.appImManager.markupTooltip) {
         this.appImManager.markupTooltip.hide();
+      }
+
+      // * Chrome has a bug - it will preserve the formatting if the input with monospace text is cleared
+      // * so have to reset formatting
+      if(document.activeElement === this.messageInput) {
+        // document.execCommand('styleWithCSS', false, 'true');
+        setTimeout(() => {
+          if(document.activeElement === this.messageInput) {
+            this.resetCurrentFormatting();
+          }
+        }, 0);
+        // document.execCommand('styleWithCSS', false, 'false');
       }
     } else {
       const time = Date.now();

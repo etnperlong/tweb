@@ -82,7 +82,7 @@ export default class SearchListLoader<Item extends {mid: number, peerId: PeerId}
     const storage = this.searchContext.isScheduled ? 
       appMessagesManager.getScheduledMessagesStorage(this.searchContext.peerId) : 
       appMessagesManager.getMessagesStorage(this.searchContext.peerId);
-     const filtered = appMessagesManager.filterMessagesByInputFilter(this.searchContext.inputFilter._, mids, storage, mids.length) as Message.message[];
+     const filtered = appMessagesManager.filterMessagesByInputFilterFromStorage(this.searchContext.inputFilter._, mids, storage, mids.length) as Message.message[];
      return filtered;
   }
 
@@ -98,6 +98,7 @@ export default class SearchListLoader<Item extends {mid: number, peerId: PeerId}
     forEachReverse(this.next, filter);
 
     if(this.current && shouldBeDeleted(this.current)) {
+      this.current = undefined;
       /* if(this.go(1)) {
         this.previous.splice(this.previous.length - 1, 1);
       } else if(this.go(-1)) {
@@ -173,9 +174,9 @@ export default class SearchListLoader<Item extends {mid: number, peerId: PeerId}
       this.loadedAllUp = true;
     }
 
-    // if(!this.searchContext.useSearch) {
-    //   this.loadedAllDown = this.loadedAllUp = true;
-    // }
+    if(this.searchContext.useSearch === false) {
+      this.loadedAllDown = this.loadedAllUp = true;
+    }
 
     if(this.otherSideLoader) {
       this.otherSideLoader.setSearchContext(context);
@@ -270,7 +271,11 @@ export default class SearchListLoader<Item extends {mid: number, peerId: PeerId}
   protected setLoaded(down: boolean, value: boolean) {
     const changed = super.setLoaded(down, value);
 
-    if(changed && this.otherSideLoader && value/*  && (this.reverse ? this.loadedAllUp : this.loadedAllDown) */) {
+    if(changed && 
+      this.otherSideLoader && 
+      value && 
+      this.searchContext?.useSearch !== false/*  && 
+      (this.reverse ? this.loadedAllUp : this.loadedAllDown) */) {
       const reverse = this.loadedAllUp;
       this.otherSideLoader.setSearchContext({
         ...this.searchContext,

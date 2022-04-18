@@ -11,7 +11,7 @@ import AvatarElement from "../../components/avatar";
 import DialogsContextMenu from "../../components/dialogsContextMenu";
 import { horizontalMenu } from "../../components/horizontalMenu";
 import { attachContextMenuListener, putPreloader } from "../../components/misc";
-import { ripple } from "../../components/ripple";
+import ripple from "../../components/ripple";
 //import Scrollable from "../../components/scrollable";
 import Scrollable, { ScrollableX, SliceSides } from "../../components/scrollable";
 import { formatDateAccordingToTodayNew } from "../../helpers/date";
@@ -61,6 +61,7 @@ import mediaSizes from "../../helpers/mediaSizes";
 import appNavigationController, { NavigationItem } from "../../components/appNavigationController";
 import assumeType from "../../helpers/assumeType";
 import generateTitleIcons from "../../components/generateTitleIcons";
+import appMediaPlaybackController from "../../components/appMediaPlaybackController";
 
 export type DialogDom = {
   avatarEl: AvatarElement,
@@ -313,7 +314,7 @@ export class AppDialogsManager {
               }
             };
     
-            appNavigationController.unshiftItem(this.filtersNavigationItem);
+            appNavigationController.spliceItems(1, 0, this.filtersNavigationItem);
           }
         } else if(this.filtersNavigationItem) {
           appNavigationController.removeItem(this.filtersNavigationItem);
@@ -338,6 +339,12 @@ export class AppDialogsManager {
     (this.folders.menu.firstElementChild as HTMLElement).click();
     appMessagesManager.construct();
     appStateManager.getState().then((state) => {
+      // * it should've had a better place :(
+      appMediaPlaybackController.setPlaybackParams(state.playbackParams);
+      rootScope.addEventListener('media_playback_params', (params) => {
+        appStateManager.pushToState('playbackParams', params);
+      });
+      
       return this.onStateLoaded(state);
     })/* .then(() => {
       const isLoadedMain = appMessagesManager.dialogsStorage.isDialogsLoaded(0);

@@ -8,14 +8,14 @@ import { MOUNT_CLASS_TO } from "../config/debug";
 import { IS_MOBILE_SAFARI } from "../environment/userAgent";
 import { logger } from "../lib/logger";
 import blurActiveElement from "../helpers/dom/blurActiveElement";
-import { cancelEvent } from "../helpers/dom/cancelEvent";
+import cancelEvent from "../helpers/dom/cancelEvent";
 import isSwipingBackSafari from "../helpers/dom/isSwipingBackSafari";
 import indexOfAndSplice from "../helpers/array/indexOfAndSplice";
 
 export type NavigationItem = {
   type: 'left' | 'right' | 'im' | 'chat' | 'popup' | 'media' | 'menu' | 
     'esg' | 'multiselect' | 'input-helper' | 'autocomplete-helper' | 'markup' | 
-    'global-search' | 'voice' | 'mobile-search' | 'filters',
+    'global-search' | 'voice' | 'mobile-search' | 'filters' | 'global-search-focus',
   onPop: (canAnimate: boolean) => boolean | void,
   onEscape?: () => boolean,
   noHistory?: boolean,
@@ -184,6 +184,13 @@ export class AppNavigationController {
   public unshiftItem(item: NavigationItem) {
     this.navigations.unshift(item);
     this.onItemAdded(item);
+  }
+
+  public spliceItems(index: number, length: number, ...items: NavigationItem[]) {
+    this.navigations.splice(index, length, ...items);
+    items.forEach((item) => {
+      this.onItemAdded(item);
+    });
   }
 
   private pushState() {

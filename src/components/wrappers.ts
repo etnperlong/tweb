@@ -6,7 +6,7 @@
 
 import type Chat from './chat/chat';
 import { getEmojiToneIndex } from '../vendor/emoji';
-import { deferredPromise } from '../helpers/cancellablePromise';
+import deferredPromise from '../helpers/cancellablePromise';
 import { formatFullSentTime } from '../helpers/date';
 import mediaSizes, { MediaSizeType, ScreenSize } from '../helpers/mediaSizes';
 import { IS_SAFARI } from '../environment/userAgent';
@@ -35,7 +35,7 @@ import sequentialDom from '../helpers/sequentialDom';
 import { fastRaf } from '../helpers/schedulers';
 import appDownloadManager, { DownloadBlob, ThumbCache } from '../lib/appManagers/appDownloadManager';
 import appStickersManager from '../lib/appManagers/appStickersManager';
-import { cancelEvent } from '../helpers/dom/cancelEvent';
+import cancelEvent from '../helpers/dom/cancelEvent';
 import { attachClickEvent, simulateClickEvent } from '../helpers/dom/clickEvent';
 import isInDOM from '../helpers/dom/isInDOM';
 import lottieLoader from '../lib/rlottie/lottieLoader';
@@ -58,6 +58,7 @@ import Row from './row';
 import { ChatAutoDownloadSettings } from '../helpers/autoDownload';
 import formatBytes from '../helpers/formatBytes';
 import toHHMMSS from '../helpers/string/toHHMMSS';
+import createVideo from '../helpers/dom/createVideo';
 
 const MAX_VIDEO_AUTOPLAY_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -183,9 +184,8 @@ export function wrapVideo({doc, container, message, boxWidth, boxHeight, withTai
 
   let preloader: ProgressivePreloader; // it must be here, otherwise will get error before initialization in round onPlay
 
-  const video = document.createElement('video');
+  const video = createVideo();
   video.classList.add('media-video');
-  video.setAttribute('playsinline', 'true');
   video.muted = true;
   if(doc.type === 'round') {
     const divRound = document.createElement('div');
@@ -1650,8 +1650,7 @@ export function wrapSticker({doc, div, middleware, lazyLoadQueue, group, play, o
       if(asStatic) {
         media = new Image();
       } else {
-        media = document.createElement('video');
-        media.setAttribute('playsinline', 'true');
+        media = createVideo();
         (media as HTMLVideoElement).muted = true;
 
         if(play) {
@@ -1783,8 +1782,7 @@ export async function wrapStickerSetThumb({set, lazyLoadQueue, container, group,
         } else {
           let media: HTMLElement;
           if(set.pFlags.videos) {
-            media = document.createElement('video');
-            media.setAttribute('playsinline', 'true');
+            media = createVideo();
             (media as HTMLVideoElement).autoplay = true;
             (media as HTMLVideoElement).muted = true;
             (media as HTMLVideoElement).loop = true;
