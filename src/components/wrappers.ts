@@ -59,6 +59,7 @@ import { ChatAutoDownloadSettings } from '../helpers/autoDownload';
 import formatBytes from '../helpers/formatBytes';
 import toHHMMSS from '../helpers/string/toHHMMSS';
 import createVideo from '../helpers/dom/createVideo';
+import setInnerHTML from '../helpers/dom/setInnerHTML';
 
 const MAX_VIDEO_AUTOPLAY_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -624,7 +625,7 @@ export function wrapDocument({message, withTime, fontWeight, voiceAsMusic, showS
   if((doc.thumbs?.length || (message.pFlags.is_outgoing && cacheContext.url && doc.type === 'photo'))/*  && doc.mime_type !== 'image/gif' */) {
     docDiv.classList.add('document-with-thumb');
 
-    let imgs: HTMLImageElement[] = [];
+    let imgs: (HTMLImageElement | HTMLCanvasElement)[] = [];
     // ! WARNING, use thumbs for check when thumb will be generated for media
     if(message.pFlags.is_outgoing && ['photo', 'video'].includes(doc.type)) {
       icoDiv.innerHTML = `<img src="${cacheContext.url}">`;
@@ -652,7 +653,7 @@ export function wrapDocument({message, withTime, fontWeight, voiceAsMusic, showS
   }
 
   //let fileName = stringMiddleOverflow(doc.file_name || 'Unknown.file', 26);
-  let fileName = doc.fileName || 'Unknown.file';
+  let fileName = doc.file_name ? RichTextProcessor.wrapPlainText(doc.file_name) : 'Unknown.file';
   const descriptionEl = document.createElement('div');
   descriptionEl.classList.add('document-description');
   const descriptionParts: (HTMLElement | string | DocumentFragment)[] = [formatBytes(doc.size)];
@@ -675,7 +676,8 @@ export function wrapDocument({message, withTime, fontWeight, voiceAsMusic, showS
   const middleEllipsisEl = new MiddleEllipsisElement();
   middleEllipsisEl.dataset.fontWeight = '' + fontWeight;
   middleEllipsisEl.dataset.sizeType = sizeType;
-  middleEllipsisEl.innerHTML = fileName;
+  middleEllipsisEl.textContent = fileName;
+  // setInnerHTML(middleEllipsisEl, fileName);
 
   nameDiv.append(middleEllipsisEl);
 
@@ -885,7 +887,7 @@ export function wrapPhoto({photo, message, container, boxWidth, boxHeight, withT
 
   let isFit = true;
   let loadThumbPromise: Promise<any> = Promise.resolve();
-  let thumbImage: HTMLImageElement;
+  let thumbImage: HTMLImageElement | HTMLCanvasElement;
   let image: HTMLImageElement;
   let cacheContext: ThumbCache;
   const isGif = photo._ === 'document' && photo.mime_type === 'image/gif' && !size;
@@ -998,8 +1000,10 @@ export function wrapPhoto({photo, message, container, boxWidth, boxHeight, withT
     if(middleware && !middleware()) return Promise.resolve();
 
     if(blurAfter) {
-      return blur(cacheContext.url, 12).then(url => {
-        return renderOnLoad(url);
+      const result = blur(cacheContext.url, 12);
+      return result.promise.then(() => {
+        // image = result.canvas;
+        return renderOnLoad(result.canvas.toDataURL());
       });
     }
 
@@ -1067,12 +1071,13 @@ export function wrapPhoto({photo, message, container, boxWidth, boxHeight, withT
   };
 }
 
-export function renderImageWithFadeIn(container: HTMLElement, 
+export function renderImageWithFadeIn(
+  container: HTMLElement, 
   image: HTMLImageElement, 
   url: string, 
   needFadeIn: boolean, 
   aspecter = container,
-  thumbImage?: HTMLImageElement
+  thumbImage?: HTMLElement
 ) {
   if(needFadeIn) {
     image.classList.add('fade-in');
@@ -1382,9 +1387,13 @@ export function wrapSticker({doc, div, middleware, lazyLoadQueue, group, play, o
       if(thumb._ === 'photoPathSize') {
         if(thumb.bytes.length) {
           const d = appPhotosManager.getPathFromPhotoPathSize(thumb);
-          div.innerHTML = `<svg class="rlottie-vector media-sticker thumbnail" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${doc.w || 512} ${doc.h || 512}" xml:space="preserve">
-            <path d="${d}"/>
-          </svg>`;
+          const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          svg.classList.add('rlottie-vector', 'media-sticker', 'thumbnail');
+          svg.setAttributeNS(null, 'viewBox', `0 0 ${doc.w || 512} ${doc.h || 512}`);
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttributeNS(null, 'd', d);
+          svg.append(path);
+          div.append(svg);
         } else {
           thumb = doc.thumbs.find(t => (t as PhotoSize.photoStrippedSize).bytes?.length) || thumb;
         }
@@ -2082,7 +2091,7 @@ export function wrapGroupedDocuments({albumMustBeRenderedFull, message, bubble, 
         entities: message.totalEntities
       });
 
-      messageDiv.innerHTML = richText;
+      setInnerHTML(messageDiv, richText);
       wrapper.append(messageDiv);
     }
 

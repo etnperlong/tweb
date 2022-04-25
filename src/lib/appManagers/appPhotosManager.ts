@@ -28,6 +28,8 @@ import windowSize from "../../helpers/windowSize";
 import bytesFromHex from "../../helpers/bytes/bytesFromHex";
 import isObject from "../../helpers/object/isObject";
 import safeReplaceArrayInObject from "../../helpers/object/safeReplaceArrayInObject";
+import bytesToDataURL from "../../helpers/bytes/bytesToDataURL";
+import { REPLIES_HIDDEN_CHANNEL_ID } from "../mtproto/mtproto_config";
 
 export type MyPhoto = Photo.photo;
 
@@ -171,8 +173,7 @@ export class AppPhotosManager {
       mimeType = 'image/jpeg';
     }
 
-    const blob = new Blob([arr], {type: mimeType});
-    return URL.createObjectURL(blob);
+    return bytesToDataURL(arr, mimeType);
   }
 
   /**
@@ -210,14 +211,19 @@ export class AppPhotosManager {
   public getImageFromStrippedThumb(photo: MyPhoto | MyDocument, thumb: PhotoSize.photoCachedSize | PhotoSize.photoStrippedSize, useBlur: boolean) {
     const url = this.getPreviewURLFromThumb(photo, thumb, false);
 
-    const image = new Image();
-    image.classList.add('thumbnail');
+    let element: HTMLImageElement | HTMLCanvasElement, loadPromise: Promise<void>;
+    if(!useBlur) {
+      element = new Image();
+      loadPromise = renderImageFromUrlPromise(element, url);
+    } else {
+      const result = blur(url);
+      element = result.canvas;
+      loadPromise = result.promise;
+    }
 
-    const loadPromise = (useBlur ? blur(url) : Promise.resolve(url)).then(url => {
-      return renderImageFromUrlPromise(image, url);
-    });
+    element.classList.add('thumbnail');
     
-    return {image, loadPromise};
+    return {image: element, loadPromise};
   }
   
   public setAttachmentSize(
@@ -258,7 +264,7 @@ export class AppPhotosManager {
         (message.message || 
           message.reply_to_mid || 
           message.media.webpage || 
-          (message.replies && message.replies.pFlags.comments && message.replies.channel_id !== 777)
+          (message.replies && message.replies.pFlags.comments && message.replies.channel_id.toChatId() !== REPLIES_HIDDEN_CHANNEL_ID)
         )
       ) { // make sure that bubble block is human-readable
         if(boxSize.width < 320) {

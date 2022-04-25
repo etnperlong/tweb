@@ -25,6 +25,7 @@ import windowSize from "../helpers/windowSize";
 import { Poll, PollResults } from "../layer";
 import toHHMMSS from "../helpers/string/toHHMMSS";
 import StackedAvatars from "./stackedAvatars";
+import setInnerHTML from "../helpers/dom/setInnerHTML";
 
 let lineTotalLength = 0;
 const tailLength = 9;
@@ -152,7 +153,7 @@ const setQuizHint = (solution: string, solution_entities: any[], onHide: () => v
   container.append(textEl);
   element.append(container);
 
-  textEl.innerHTML = RichTextProcessor.wrapRichText(solution, {entities: solution_entities});
+  setInnerHTML(textEl, RichTextProcessor.wrapRichText(solution, {entities: solution_entities}));
   appImManager.chat.bubbles.bubblesContainer.append(element);
 
   void element.offsetLeft; // reflow
@@ -273,7 +274,7 @@ export default class PollElement extends HTMLElement {
             ${multipleSelect}
           </div>
           <div class="poll-answer-percents"></div>
-          <div class="poll-answer-text">${RichTextProcessor.wrapEmojiText(answer.text)}</div>
+          <div class="poll-answer-text"></div>
           <svg version="1.1" class="poll-line" style="display: none;" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 485.9 35" xml:space="preserve">
             <use href="#poll-line"></use>
           </svg>
@@ -283,12 +284,18 @@ export default class PollElement extends HTMLElement {
     }).join('');
 
     this.innerHTML = `
-      <div class="poll-title">${poll.rQuestion}</div>
+      <div class="poll-title"></div>
       <div class="poll-desc">
         <div class="poll-type"></div>
         <div class="poll-avatars"></div>
       </div>
       ${votes}`;
+    
+    setInnerHTML(this.firstElementChild, RichTextProcessor.wrapEmojiText(poll.question));
+
+    Array.from(this.querySelectorAll('.poll-answer-text')).forEach((el, idx) => {
+      setInnerHTML(el, RichTextProcessor.wrapEmojiText(poll.answers[idx].text));
+    });
 
     this.descDiv = this.firstElementChild.nextElementSibling as HTMLElement;
     this.typeDiv = this.descDiv.firstElementChild as HTMLElement;

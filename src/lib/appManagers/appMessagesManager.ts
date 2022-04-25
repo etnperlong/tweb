@@ -48,7 +48,7 @@ import appNotificationsManager, { NotifyOptions } from "./appNotificationsManage
 import PeerTitle from "../../components/peerTitle";
 import htmlToDocumentFragment from "../../helpers/dom/htmlToDocumentFragment";
 import htmlToSpan from "../../helpers/dom/htmlToSpan";
-import { MUTE_UNTIL, NULL_PEER_ID, REPLIES_PEER_ID, SERVICE_PEER_ID } from "../mtproto/mtproto_config";
+import { MUTE_UNTIL, NULL_PEER_ID, REPLIES_HIDDEN_CHANNEL_ID, REPLIES_PEER_ID, SERVICE_PEER_ID } from "../mtproto/mtproto_config";
 import formatCallDuration from "../../helpers/formatCallDuration";
 import appAvatarsManager from "./appAvatarsManager";
 import telegramMeWebManager from "../mtproto/telegramMeWebManager";
@@ -71,6 +71,7 @@ import escapeRegExp from "../../helpers/string/escapeRegExp";
 import limitSymbols from "../../helpers/string/limitSymbols";
 import splitStringByLength from "../../helpers/string/splitStringByLength";
 import debounce from "../../helpers/schedulers/debounce";
+import setInnerHTML from "../../helpers/dom/setInnerHTML";
 
 //console.trace('include');
 // TODO: если удалить диалог находясь в папке, то он не удалится из папки и будет виден в настройках
@@ -2905,7 +2906,7 @@ export class AppMessagesManager {
     const parts: (Node | string)[] = [];
 
     let hasAlbumKey = false;
-    const addPart = (langKey: LangPackKey, part?: string | HTMLElement) => {
+    const addPart = (langKey: LangPackKey, part?: string | HTMLElement | DocumentFragment) => {
       if(langKey) {
         if(part === undefined && hasAlbumKey) {
           return;
@@ -2980,7 +2981,8 @@ export class AppMessagesManager {
             addPart('AttachLiveLocation');
             break;
           case 'messageMediaPoll':
-            addPart(undefined, plain ? '📊' + ' ' + (media.poll.question || 'poll') : media.poll.rReply);
+            const f = '📊' + ' ' + (media.poll.question || 'poll');
+            addPart(undefined, plain ? f : RichTextProcessor.wrapEmojiText(f));
             break;
           case 'messageMediaContact':
             addPart('AttachContact');
@@ -3004,7 +3006,8 @@ export class AppMessagesManager {
             } else if(document.type === 'sticker') {
               const i = parts.length;
               if(document.stickerEmojiRaw) {
-                addPart(undefined, (plain ? document.stickerEmojiRaw : document.stickerEmoji) + ' ');
+                const f = document.stickerEmojiRaw + ' ';
+                addPart(undefined, plain ? f : RichTextProcessor.wrapEmojiText(f));
               }
               
               addPart('AttachSticker');
@@ -3099,7 +3102,7 @@ export class AppMessagesManager {
           noTextFormat: true
         });
   
-        parts.push(htmlToDocumentFragment(messageWrapped) as any);
+        parts.push(htmlToDocumentFragment(messageWrapped));
       }
     }
 
@@ -3179,7 +3182,7 @@ export class AppMessagesManager {
       if(plain) {
         return RichTextProcessor.wrapPlainText(unsafeMessage);
       } else {
-        element.innerHTML = RichTextProcessor.wrapRichText(unsafeMessage, {noLinebreaks: true});
+        setInnerHTML(element, RichTextProcessor.wrapRichText(unsafeMessage, {noLinebreaks: true}));
         return element;
       }
     } else {
@@ -5753,7 +5756,7 @@ export class AppMessagesManager {
   public getMessageWithReplies(message: Message.message) {
     if(message.peerId !== REPLIES_PEER_ID) {
       message = this.filterMessages(message, message => !!(message as Message.message).replies)[0] as any;
-      if(!(message && message.replies && message.replies.pFlags.comments && message.replies.channel_id !== '777')) {
+      if(!(message && message.replies && message.replies.pFlags.comments && message.replies.channel_id.toChatId() !== REPLIES_HIDDEN_CHANNEL_ID)) {
         return;
       }
     }

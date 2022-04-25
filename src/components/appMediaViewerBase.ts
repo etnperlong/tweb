@@ -1165,7 +1165,7 @@ export default class AppMediaViewerBase<
       }).element;
     } else {
       title = document.createElement('span');
-      title.innerHTML = RichTextProcessor.wrapEmojiText(fromId);
+      title.append(RichTextProcessor.wrapEmojiText(fromId));
       title.classList.add('peer-title');
     }
 
@@ -1292,7 +1292,7 @@ export default class AppMediaViewerBase<
     const size = appPhotosManager.setAttachmentSize(media, container, maxWidth, maxHeight, mediaSizes.isMobile ? false : true, undefined, !!(isDocument && media.w && media.h)).photoSize;
     if(useContainerAsTarget) {
       const cacheContext = appDownloadManager.getCacheContext(media, size.type);
-      let img: HTMLImageElement;
+      let img: HTMLImageElement | HTMLCanvasElement;
       if(cacheContext.downloaded) {
         img = new Image();
         img.src = cacheContext.url;
@@ -1410,7 +1410,8 @@ export default class AppMediaViewerBase<
                   this.wholeDiv.classList.toggle('hide-caption', !!open);
                 },
                 onPip: (pip) => {
-                  if(!pip && (window as any).appMediaViewer !== this) {
+                  const otherMediaViewer = (window as any).appMediaViewer;
+                  if(!pip && otherMediaViewer && otherMediaViewer !== this) {
                     this.releaseSingleMedia = undefined;
                     this.close();
                     return;
