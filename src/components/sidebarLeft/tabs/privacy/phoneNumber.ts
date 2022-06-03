@@ -6,9 +6,10 @@
 
 import { PrivacyType } from "../../../../lib/appManagers/appPrivacyManager";
 import { SliderSuperTabEventable } from "../../../sliderTab";
-import PrivacySection, { PrivacySectionStr } from "../../../privacySection";
+import PrivacySection from "../../../privacySection";
 import { i18n, LangPackKey } from "../../../../lib/langPack";
 import anchorCopy from "../../../../helpers/dom/anchorCopy";
+import appUsersManager from "../../../../lib/appManagers/appUsersManager";
 
 export default class AppPrivacyPhoneNumberTab extends SliderSuperTabEventable {
   protected init() {
@@ -16,6 +17,7 @@ export default class AppPrivacyPhoneNumberTab extends SliderSuperTabEventable {
     this.container.classList.add('privacy-tab', 'privacy-phone-number');
     this.setTitle('PrivacyPhone');
 
+    const formatted = '+' + appUsersManager.getSelf().phone;
     const captionEl = document.createElement('div');
     captionEl.append(
       i18n('PrivacyPhoneInfo'), 
@@ -24,7 +26,7 @@ export default class AppPrivacyPhoneNumberTab extends SliderSuperTabEventable {
       i18n('PrivacyPhoneInfo4'),
       document.createElement('br'),
       anchorCopy({
-        mePath: '+380509144504'
+        mePath: formatted
       })
     );
 
