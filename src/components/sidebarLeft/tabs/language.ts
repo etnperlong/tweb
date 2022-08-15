@@ -7,7 +7,6 @@
 import { SettingSection } from "..";
 import { randomLong } from "../../../helpers/random";
 import I18n from "../../../lib/langPack";
-import apiManager from "../../../lib/mtproto/mtprotoworker";
 import RadioField from "../../radioField";
 import Row, { RadioFormFromRows } from "../../row";
 import { SliderSuperTab } from "../../slider"
@@ -22,11 +21,20 @@ export default class AppLanguageTab extends SliderSuperTab {
 
     const radioRows: Map<string, Row> = new Map();
 
-    const promise = apiManager.invokeApiCacheable('langpack.getLanguages', {
-      lang_pack: 'macos'
-    }).then((languages) => {
-      // Push Unofficial TW/CN Languages
-      languages.unshift({
+    const promise = Promise.all([
+      this.managers.apiManager.invokeApiCacheable('langpack.getLanguages', {
+        lang_pack: 'web'
+      }),
+      this.managers.apiManager.invokeApiCacheable('langpack.getLanguages', {
+        lang_pack: 'macos'
+      }),
+    ]).then(([languages1, languages2]) => {
+      const rendered: Set<string> = new Set();
+      const webLangCodes = languages1.map((language) => language.lang_code);
+
+      const random = randomLong();
+
+      languages1.unshift({
         _: 'langPackLanguage',
         name: 'Chinese (Traditional)',
         native_name: '繁體中文 (Beta)',
@@ -40,7 +48,7 @@ export default class AppLanguageTab extends SliderSuperTab {
         translated_count: 3852,
         translations_url: 'https://translations.telegram.org/zh-hant/macos/',
       });
-      languages.unshift({
+      languages1.unshift({
         _: 'langPackLanguage',
         name: 'Chinese (Simplified)',
         native_name: '简体中文 (Beta)',
@@ -54,8 +62,11 @@ export default class AppLanguageTab extends SliderSuperTab {
         translated_count: 3852,
         translations_url: 'https://translations.telegram.org/zh-hans/macos/',
       });
-      const random = randomLong();
-      languages.forEach((language) => {
+
+      languages1.concat(languages2).forEach((language) => {
+        if(rendered.has(language.lang_code)) return;
+        rendered.add(language.lang_code);
+
         const row = new Row({
           radioField: new RadioField({
             text: language.name, 
@@ -69,10 +80,10 @@ export default class AppLanguageTab extends SliderSuperTab {
       });
 
       const form = RadioFormFromRows([...radioRows.values()], (value) => {
-        I18n.getLangPack(value);
+        I18n.getLangPack(value, webLangCodes.includes(value));
       });
   
-      I18n.getCacheLangPack().then(langPack => {
+      I18n.getCacheLangPack().then((langPack) => {
         const row = radioRows.get(langPack.lang_code);
         if(!row) {
           console.error('no row', row, langPack);

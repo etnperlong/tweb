@@ -10,8 +10,9 @@
  */
 
 import Modes from '../config/modes';
-import { notifySomeone, IS_WORKER } from '../helpers/context';
+import { IS_WORKER } from '../helpers/context';
 import { WorkerTaskTemplate } from '../types';
+import MTProtoMessagePort from './mtproto/mtprotoMessagePort';
 //import { stringify } from '../helpers/json';
 
 class LocalStorage<Storage extends Record<string, any>> {
@@ -92,7 +93,7 @@ class LocalStorage<Storage extends Record<string, any>> {
       try {
         let obj: Partial<Storage> = {};
         if(preserveKeys) {
-          preserveKeys.forEach(key => {
+          preserveKeys.forEach((key) => {
             const value = this.get(key);
             if(value !== undefined) {
               obj[key] = value;
@@ -112,7 +113,7 @@ class LocalStorage<Storage extends Record<string, any>> {
   } */
 
   public clear() {
-    const keys: string[] = ['dc', 'server_time_offset', 'xt_instance', 'user_auth', 'state_id'];
+    const keys: string[] = ['dc', 'server_time_offset', 'xt_instance', 'user_auth', 'state_id', 'k_build'];
     for(let i = 1; i <= 5; ++i) {
       keys.push(`dc${i}_server_salt`);
       keys.push(`dc${i}_auth_key`);
@@ -123,8 +124,12 @@ class LocalStorage<Storage extends Record<string, any>> {
     }
   }
 
-  public toggleStorage(enabled: boolean) {
+  public toggleStorage(enabled: boolean, clearWrite: boolean) {
     this.useStorage = enabled;
+
+    if(!clearWrite) {
+      return;
+    }
 
     if(!enabled) {
       this.clear();
@@ -149,8 +154,6 @@ export interface LocalStorageProxyTaskResponse extends WorkerTaskTemplate {
 
 export default class LocalStorageController<Storage extends Record<string, any>> {
   private static STORAGES: LocalStorageController<any>[] = [];
-  private taskId = 0;
-  private tasks: {[taskID: number]: (result: any) => void} = {};
   //private log = (...args: any[]) => console.log('[SW LS]', ...args);
   //private log = (...args: any[]) => {};
 
@@ -164,42 +167,16 @@ export default class LocalStorageController<Storage extends Record<string, any>>
     }
   }
 
-  public finishTask(taskId: number, result: any) {
-    //this.log('finishTask:', taskID, result, Object.keys(this.tasks));
-
-    if(!this.tasks.hasOwnProperty(taskId)) {
-      //this.log('no such task:', taskID, result);
-      return;
+  private async proxy<T>(type: LocalStorageProxyTask['payload']['type'], ...args: LocalStorageProxyTask['payload']['args']): Promise<T> {
+    if(IS_WORKER) {
+      const port = MTProtoMessagePort.getInstance<false>();
+      return port.invoke('localStorageProxy', {type, args});
     }
+    
+    args = Array.prototype.slice.call(args);
 
-    this.tasks[taskId](result);
-    delete this.tasks[taskId];
-  }
-
-  private proxy<T>(type: LocalStorageProxyTask['payload']['type'], ...args: LocalStorageProxyTask['payload']['args']) {
-    return new Promise<T>((resolve, reject) => {
-      if(IS_WORKER) {
-        const taskId = this.taskId++;
-
-        this.tasks[taskId] = resolve;
-        const task: LocalStorageProxyTask = {
-          type: 'localStorageProxy', 
-          id: taskId,
-          payload: {
-            type,
-            args
-          }
-        };
-
-        notifySomeone(task);
-      } else {
-        args = Array.prototype.slice.call(args);
-
-        // @ts-ignore
-        const result: any = this.storage[type].apply(this.storage, args as any);
-        resolve(result);
-      }
-    });
+    // @ts-ignore
+    return this.storage[type].apply(this.storage, args as any);
   }
 
   public get<T extends keyof Storage>(key: T, useCache?: boolean) {
@@ -218,7 +195,7 @@ export default class LocalStorageController<Storage extends Record<string, any>>
     return this.proxy<void>('clear'/* , preserveKeys */);
   }
 
-  public toggleStorage(enabled: boolean) {
-    return this.proxy<void>('toggleStorage', enabled);
+  public toggleStorage(enabled: boolean, clearWrite: boolean) {
+    return this.proxy<void>('toggleStorage', enabled, clearWrite);
   }
 }

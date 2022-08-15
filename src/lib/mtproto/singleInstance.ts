@@ -9,12 +9,16 @@
  * https://github.com/zhukov/webogram/blob/master/LICENSE
  */
 
+import App from "../../config/app";
 import { MOUNT_CLASS_TO } from "../../config/debug";
-import { nextRandomUint } from "../../helpers/random";
+import tabId from "../../config/tabId";
+import IS_SHARED_WORKER_SUPPORTED from "../../environment/sharedWorkerSupport";
+import EventListenerBase from "../../helpers/eventListenerBase";
+import idleController from "../../helpers/idleController";
 import { logger } from "../logger";
 import rootScope from "../rootScope";
 import sessionStorage from "../sessionStorage";
-import apiManager from "./mtprotoworker";
+import apiManagerProxy from "./mtprotoworker";
 
 export type AppInstance = {
   id: number,
@@ -22,27 +26,42 @@ export type AppInstance = {
   time: number
 };
 
+export type InstanceDeactivateReason = 'version' | 'tabs';
+
 const CHECK_INSTANCE_INTERVAL = 5000; 
 const DEACTIVATE_TIMEOUT = 30000;
 const MULTIPLE_TABS_THRESHOLD = 20000;
+const IS_MULTIPLE_TABS_SUPPORTED = IS_SHARED_WORKER_SUPPORTED;
 
-export class SingleInstance {
-  private instanceID: number;
+export class SingleInstance extends EventListenerBase<{
+  activated: () =>  void,
+  deactivated: (reason: InstanceDeactivateReason) => void
+}> {
+  private instanceId: number;
   private started: boolean;
   private masterInstance: boolean;
   private deactivateTimeout: number;
-  private deactivated: boolean;
-  private initial: boolean;
+  private deactivated: InstanceDeactivateReason;
   private log = logger('INSTANCE');
 
+  constructor() {
+    super(false);
+
+    this.log = logger('INSTANCE');
+    this.instanceId = tabId;
+  }
+
+  public get deactivatedReason() {
+    return this.deactivated;
+  }
+
   public start() {
+    this.reset();
+
     if(!this.started/*  && !Config.Navigator.mobile && !Config.Modes.packed */) {
       this.started = true;
 
-      this.reset();
-      //IdleManager.start();
-
-      rootScope.addEventListener('idle', this.checkInstance);
+      idleController.addEventListener('change', this.checkInstance);
       setInterval(this.checkInstance, CHECK_INSTANCE_INTERVAL);
       this.checkInstance();
 
@@ -52,16 +71,13 @@ export class SingleInstance {
     }
   }
 
-  public reset() {
-    this.instanceID = nextRandomUint(32);
+  private reset() {
     this.masterInstance = false;
-    if(this.deactivateTimeout) clearTimeout(this.deactivateTimeout);
-    this.deactivateTimeout = 0;
-    this.deactivated = false;
-    this.initial = false;
+    this.clearDeactivateTimeout();
+    this.deactivated = undefined;
   }
 
-  public clearInstance = () => {
+  private clearInstance = () => {
     if(this.masterInstance && !this.deactivated) {
       this.log.warn('clear master instance');
       sessionStorage.delete('xt_instance');
@@ -72,74 +88,77 @@ export class SingleInstance {
     if(this.deactivated) {
       this.reset();
       this.checkInstance(false);
-      rootScope.dispatchEvent('instance_activated');
+      this.dispatchEvent('activated');
     }
   }
 
-  public deactivateInstance = () => {
+  private deactivateInstance(reason: InstanceDeactivateReason) {
     if(this.masterInstance || this.deactivated) {
-      return false;
+      return;
     }
 
-    this.log('deactivate');
-    this.deactivateTimeout = 0;
-    this.deactivated = true;
-    this.clearInstance();
-    //$modalStack.dismissAll();
+    this.log.warn('deactivate', reason);
+    this.clearDeactivateTimeout();
+    this.deactivated = reason;
 
-    //document.title = _('inactive_tab_title_raw')
+    this.dispatchEvent('deactivated', reason);
+  }
 
-    rootScope.idle.deactivated = true;
-    rootScope.dispatchEvent('instance_deactivated');
-  };
+  private clearDeactivateTimeout() {
+    if(this.deactivateTimeout) {
+      clearTimeout(this.deactivateTimeout);
+      this.deactivateTimeout = 0;
+    }
+  }
 
-  public checkInstance = (idle = rootScope.idle && rootScope.idle.isIDLE) => {
+  private checkInstance = async(idle = idleController.isIdle) => {
     if(this.deactivated) {
-      return false;
+      return;
     }
     
     const time = Date.now();
     const newInstance: AppInstance = {
-      id: this.instanceID, 
+      id: this.instanceId, 
       idle, 
       time
     };
 
-    sessionStorage.get('xt_instance', false).then((curInstance: AppInstance) => {
-      // this.log('check instance', newInstance, curInstance)
-      if(!idle ||
-          !curInstance ||
-          curInstance.id === this.instanceID ||
-          curInstance.time < (time - MULTIPLE_TABS_THRESHOLD)) {
-        sessionStorage.set({xt_instance: newInstance});
+    const [curInstance, build = App.build] = await Promise.all([
+      sessionStorage.get('xt_instance', false),
+      sessionStorage.get('k_build', false)
+    ]);
 
-        if(!this.masterInstance) {
-          apiManager.startAll();
-          if(!this.initial) {
-            this.initial = true;
-          } else {
-            this.log.warn('now master instance', newInstance);
-          }
+    if(build > App.build) {
+      this.masterInstance = false;
+      rootScope.managers.networkerFactory.stopAll();
+      this.deactivateInstance('version');
+      apiManagerProxy.toggleStorages(false, false);
+      return;
+    } else if(IS_MULTIPLE_TABS_SUPPORTED) {
+      sessionStorage.set({xt_instance: newInstance});
+      return;
+    }
+    
+    // this.log('check instance', newInstance, curInstance)
+    if(!idle ||
+        !curInstance ||
+        curInstance.id === this.instanceId ||
+        curInstance.time < (time - MULTIPLE_TABS_THRESHOLD)) {
+      sessionStorage.set({xt_instance: newInstance});
 
-          this.masterInstance = true;
-        }
-
-        if(this.deactivateTimeout) {
-          clearTimeout(this.deactivateTimeout);
-          this.deactivateTimeout = 0;
-        }
-      } else {
-        if(this.masterInstance) {
-          apiManager.stopAll();
-          this.log.warn('now idle instance', newInstance);
-          if(!this.deactivateTimeout) {
-            this.deactivateTimeout = window.setTimeout(this.deactivateInstance, DEACTIVATE_TIMEOUT);
-          }
-
-          this.masterInstance = false;
-        }
+      if(!this.masterInstance) {
+        this.masterInstance = true;
+        rootScope.managers.networkerFactory.startAll();
+        this.log.warn('now master instance', newInstance);
       }
-    });
+
+      this.clearDeactivateTimeout();
+    } else if(this.masterInstance) {
+      this.masterInstance = false;
+      rootScope.managers.networkerFactory.stopAll();
+      this.log.warn('now idle instance', newInstance);
+      this.deactivateTimeout ||= window.setTimeout(() => this.deactivateInstance('tabs'), DEACTIVATE_TIMEOUT);
+    }
   };
 }
 

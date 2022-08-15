@@ -80,6 +80,10 @@ type Impossible<K extends keyof any> = {
 // using generics.
 type NoExtraProperties<T, U extends T = T> = U & Impossible<Exclude<keyof U, keyof T>>;
 
+type ModifyFunctionsToAsync<T> = {
+  [key in keyof T]: T[key] extends (...args: infer A) => infer R ? (R extends PromiseLike<infer O> ? T[key] : (...args: A) => Promise<Awaited<R>>) : T[key]
+};
+
 export type AuthState = AuthState.signIn | AuthState.signQr | AuthState.authCode | AuthState.password | AuthState.signUp | AuthState.signedIn;
 export namespace AuthState {
   export type signIn = {
@@ -116,3 +120,28 @@ export type SendMessageEmojiInteractionData = {
   a: {t: number, i: 1}[],
   v: 1
 };
+
+/**
+ * @link https://core.telegram.org/api/web-events#postmessage-api
+ */
+ export type TelegramWebviewEventMap = {
+  payment_form_submit: {
+    credentials: any,
+    title: string
+  },
+  web_app_open_tg_link: {
+    path_full: string // '/username'
+  }
+};
+
+export type TelegramWebviewSerializedEvent<T extends keyof TelegramWebviewEventMap> = {
+  eventType: T,
+  eventData: TelegramWebviewEventMap[T]
+};
+
+export type TelegramWebviewSerializedEvents = {
+  [type in keyof TelegramWebviewEventMap]: TelegramWebviewSerializedEvent<type>
+};
+
+export type TelegramWebviewEvent = TelegramWebviewSerializedEvents[keyof TelegramWebviewEventMap];
+export type TelegramWebviewEventCallback = (event: TelegramWebviewEvent) => void;

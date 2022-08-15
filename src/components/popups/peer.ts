@@ -15,23 +15,28 @@ export type PopupPeerButtonCallbackCheckboxes = Set<LangPackKey>;
 export type PopupPeerButtonCallback = (checkboxes?: PopupPeerButtonCallbackCheckboxes) => void;
 export type PopupPeerCheckboxOptions = CheckboxFieldOptions & {checkboxField?: CheckboxField};
 
-export type PopupPeerOptions = PopupOptions & Partial<{
+export type PopupPeerOptions = Omit<PopupOptions, 'buttons' | 'title'> & Partial<{
   peerId: PeerId,
   title: string | HTMLElement,
-  titleLangKey?: LangPackKey,
-  titleLangArgs?: any[],
-  noTitle?: boolean,
+  titleLangKey: LangPackKey,
+  titleLangArgs: any[],
+  noTitle: boolean,
   description: string | DocumentFragment,
-  descriptionLangKey?: LangPackKey,
-  descriptionLangArgs?: any[],
-  buttons?: Array<PopupPeerButton>,
+  descriptionLangKey: LangPackKey,
+  descriptionLangArgs: any[],
+  buttons: Array<PopupPeerButton>,
   checkboxes: Array<PopupPeerCheckboxOptions>
 }>;
 export default class PopupPeer extends PopupElement {
   protected description: HTMLParagraphElement;
 
   constructor(private className: string, options: PopupPeerOptions = {}) {
-    super('popup-peer' + (className ? ' ' + className : ''), options.buttons && addCancelButton(options.buttons), {overlayClosable: true, ...options});
+    super('popup-peer' + (className ? ' ' + className : ''), {
+      overlayClosable: true, 
+      ...options,
+      title: true,
+      buttons: options.buttons && addCancelButton(options.buttons),
+    });
 
     if(options.peerId) {
       const avatarEl = new AvatarElement();
@@ -64,19 +69,19 @@ export default class PopupPeer extends PopupElement {
     if(options.checkboxes) {
       this.container.classList.add('have-checkbox');
       
-      options.checkboxes.forEach(o => {
-        o.withRipple = false;
+      options.checkboxes.forEach((o) => {
+        o.withRipple = true;
         const checkboxField = new CheckboxField(o);
         o.checkboxField = checkboxField;
         fragment.append(checkboxField.label);
       });
 
-      options.buttons.forEach(button => {
+      options.buttons.forEach((button) => {
         if(button.callback) {
           const original = button.callback;
           button.callback = () => {
             const c: Set<LangPackKey> = new Set();
-            options.checkboxes.forEach(o => {
+            options.checkboxes.forEach((o) => {
               if(o.checkboxField.checked) {
                 c.add(o.text);
               }

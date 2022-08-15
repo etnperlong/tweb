@@ -7,15 +7,19 @@
 import MEDIA_MIME_TYPES_SUPPORTED from "../environment/mediaMimeTypesSupport";
 import cancelEvent from "../helpers/dom/cancelEvent";
 import { attachClickEvent, detachClickEvent } from "../helpers/dom/clickEvent";
+import findUpClassName from "../helpers/dom/findUpClassName";
+import findUpTag from "../helpers/dom/findUpTag";
 import setInnerHTML from "../helpers/dom/setInnerHTML";
 import mediaSizes from "../helpers/mediaSizes";
 import SearchListLoader from "../helpers/searchListLoader";
 import { Message } from "../layer";
-import appDocsManager, { MyDocument } from "../lib/appManagers/appDocsManager";
+import type { MyDocument } from "../lib/appManagers/appDocsManager";
+import appDownloadManager from "../lib/appManagers/appDownloadManager";
 import appImManager from "../lib/appManagers/appImManager";
-import appMessagesManager, { MyMessage } from "../lib/appManagers/appMessagesManager";
-import appPhotosManager, { MyPhoto } from "../lib/appManagers/appPhotosManager";
-import RichTextProcessor from "../lib/richtextprocessor";
+import { MyMessage } from "../lib/appManagers/appMessagesManager";
+import { MyPhoto } from "../lib/appManagers/appPhotosManager";
+import getMediaFromMessage from "../lib/appManagers/utils/messages/getMediaFromMessage";
+import wrapRichText from "../lib/richTextProcessor/wrapRichText";
 import { MediaSearchContext } from "./appMediaPlaybackController";
 import AppMediaViewerBase, { MEDIA_VIEWER_CLASSNAME } from "./appMediaViewerBase";
 import { ButtonMenuItemOptions } from "./buttonMenu";
@@ -45,7 +49,7 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
       processItem: (item) => {
         const isForDocument = this.searchContext.inputFilter._ === 'inputMessagesFilterDocument';
         const {mid, peerId} = item;
-        const media: MyPhoto | MyDocument = appMessagesManager.getMediaFromMessage(item);
+        const media: MyPhoto | MyDocument = getMediaFromMessage(item);
 
         if(!media) return;
         
@@ -66,7 +70,7 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
     this.content.main.prepend(stub); */
 
     this.content.caption = document.createElement('div');
-    this.content.caption.classList.add(MEDIA_VIEWER_CLASSNAME + '-caption'/* , 'media-viewer-stub' */);
+    this.content.caption.classList.add(MEDIA_VIEWER_CLASSNAME + '-caption', 'message'/* , 'media-viewer-stub' */);
 
     let captionTimeout: number;
     const setCaptionTimeout = () => {
@@ -127,8 +131,10 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
     attachClickEvent(this.author.container, this.onAuthorClick);
 
     const onCaptionClick = (e: MouseEvent) => {
-      if(e.target instanceof HTMLAnchorElement) { // close viewer if it's t.me/ redirect
-        const onclick = (e.target as HTMLElement).getAttribute('onclick');
+      const a = findUpTag(e.target, 'A');
+      const spoiler = findUpClassName(e.target, 'spoiler');
+      if(a instanceof HTMLAnchorElement && (!spoiler || this.content.caption.classList.contains('is-spoiler-visible'))) { // close viewer if it's t.me/ redirect
+        const onclick = a.getAttribute('onclick');
         if(!onclick || onclick.includes('showMaskedAlert')) {
           return;
         }
@@ -136,15 +142,15 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
         cancelEvent(e);
 
         this.close().then(() => {
-          detachClickEvent(this.content.caption, onCaptionClick, {capture: true});
-          (e.target as HTMLAnchorElement).click();
+          this.content.caption.removeEventListener('click', onCaptionClick, {capture: true});
+          a.click();
         });
 
         return false;
       }
     };
 
-    attachClickEvent(this.content.caption, onCaptionClick, {capture: true});
+    this.content.caption.addEventListener('click', onCaptionClick, {capture: true});
   }
 
   /* public close(e?: MouseEvent) {
@@ -160,15 +166,15 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
   } */
 
   protected getMessageByPeer(peerId: PeerId, mid: number) {
-    return this.searchContext.isScheduled ? appMessagesManager.getScheduledMessageByPeer(peerId, mid) : appMessagesManager.getMessageByPeer(peerId, mid);
+    return this.searchContext.isScheduled ? this.managers.appMessagesManager.getScheduledMessageByPeer(peerId, mid) : this.managers.appMessagesManager.getMessageByPeer(peerId, mid);
   }
 
-  onPrevClick = (target: AppMediaViewerTargetType) => {
-    this.openMedia(this.getMessageByPeer(target.peerId, target.mid), target.element, -1);
+  onPrevClick = async(target: AppMediaViewerTargetType) => {
+    this.openMedia(await this.getMessageByPeer(target.peerId, target.mid), target.element, -1);
   };
 
-  onNextClick = (target: AppMediaViewerTargetType) => {
-    this.openMedia(this.getMessageByPeer(target.peerId, target.mid), target.element, 1);
+  onNextClick = async(target: AppMediaViewerTargetType) => {
+    this.openMedia(await this.getMessageByPeer(target.peerId, target.mid), target.element, 1);
   };
 
   onDeleteClick = () => {
@@ -191,21 +197,21 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
     }
   };
 
-  onAuthorClick = (e: MouseEvent) => {
+  onAuthorClick = async(e: MouseEvent) => {
     const {mid, peerId} = this.target;
     if(mid && mid !== Number.MAX_SAFE_INTEGER) {
       const threadId = this.searchContext.threadId;
-      const message = this.getMessageByPeer(peerId, mid);
+      const message = await this.getMessageByPeer(peerId, mid);
       this.close(e)
       //.then(() => mediaSizes.isMobile ? appSidebarRight.sharedMediaTab.closeBtn.click() : Promise.resolve())
-      .then(() => {
+      .then(async() => {
         if(mediaSizes.isMobile) {
           const tab = appSidebarRight.getTab(AppSharedMediaTab);
           if(tab) {
             tab.close();
           }
         }
-
+        
         appImManager.setInnerPeer({
           peerId: message.peerId, 
           lastMsgId: mid, 
@@ -216,29 +222,19 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
     }
   };
 
-  onDownloadClick = () => {
+  onDownloadClick = async() => {
     const {peerId, mid} = this.target;
-    const message = this.getMessageByPeer(peerId, mid);
-    if(message.media.photo) {
-      appPhotosManager.savePhotoFile(message.media.photo, appImManager.chat.bubbles.lazyLoadQueue.queueId);
-    } else {
-      let document: MyDocument = null;
-
-      if(message.media.webpage) document = message.media.webpage.document;
-      else document = message.media.document;
-
-      if(document) {
-        //console.log('will save document:', document);
-        appDocsManager.saveDocFile(document, appImManager.chat.bubbles.lazyLoadQueue.queueId);
-      }
-    }
+    const message = await this.getMessageByPeer(peerId, mid);
+    const media = getMediaFromMessage(message);
+    if(!media) return;
+    appDownloadManager.downloadToDisc({media, queueId: appImManager.chat.bubbles.lazyLoadQueue.queueId});
   };
 
   private setCaption(message: MyMessage) {
     const caption = (message as Message.message).message;
     let html: Parameters<typeof setInnerHTML>[1] = '';
     if(caption) {
-      html = RichTextProcessor.wrapRichText(caption, {
+      html = wrapRichText(caption, {
         entities: (message as Message.message).totalEntities
       });
     }
@@ -261,22 +257,22 @@ export default class AppMediaViewer extends AppMediaViewerBase<'caption', 'delet
 
     const mid = message.mid;
     const fromId = (message as Message.message).fwd_from && !message.fromId ? (message as Message.message).fwd_from.from_name : message.fromId;
-    const media = appMessagesManager.getMediaFromMessage(message);
+    const media = getMediaFromMessage(message);
 
-    const cantForwardMessage = message._ === 'messageService' || !appMessagesManager.canForward(message);
-    [this.buttons.forward, this.btnMenuForward.element].forEach(button => {
+    const cantForwardMessage = message._ === 'messageService' || !this.managers.appMessagesManager.canForward(message);
+    [this.buttons.forward, this.btnMenuForward.element].forEach((button) => {
       button.classList.toggle('hide', cantForwardMessage);
     });
 
     this.wholeDiv.classList.toggle('no-forwards', cantForwardMessage);
     
     const cantDownloadMessage = cantForwardMessage;
-    [this.buttons.download, this.btnMenuDownload.element].forEach(button => {
+    [this.buttons.download, this.btnMenuDownload.element].forEach((button) => {
       button.classList.toggle('hide', cantDownloadMessage);
     });
 
-    const canDeleteMessage = appMessagesManager.canDeleteMessage(message);
-    [this.buttons.delete, this.btnMenuDelete.element].forEach(button => {
+    const canDeleteMessage = this.managers.appMessagesManager.canDeleteMessage(message);
+    [this.buttons.delete, this.btnMenuDelete.element].forEach((button) => {
       button.classList.toggle('hide', !canDeleteMessage);
     });
 

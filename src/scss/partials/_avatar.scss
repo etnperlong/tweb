@@ -66,7 +66,7 @@ avatar-element {
   }
 
   &.tgico-saved:before {
-    font-size: calc(21px / var(--multiplier)) !important; // ! IMPORTANT IS TEMPORARY
+    font-size: calc(25px / var(--multiplier)) !important; // ! IMPORTANT IS TEMPORARY
   }
 
   &.tgico-reply_filled:before {
@@ -209,9 +209,19 @@ avatar-element {
     --multiplier: 1.6875;
   }
 
+  &.avatar-26 {
+    --size: 26px;
+    --multiplier: 2.076923;
+  }
+
   &.avatar-24 {
     --size: 24px;
     --multiplier: 2.25;
+  }
+
+  &.avatar-22 {
+    --size: 22px;
+    --multiplier: 2.454545;
   }
 
   &.avatar-18 {

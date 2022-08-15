@@ -4,20 +4,20 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
-import DEBUG, { MOUNT_CLASS_TO } from "../config/debug";
 import type lang from "../lang";
 import type langSign from "../langSign";
-import type { State } from "./appManagers/appStateManager";
+import type { State } from "../config/state";
+import DEBUG, { MOUNT_CLASS_TO } from "../config/debug";
 import { HelpCountriesList, HelpCountry, LangPackDifference, LangPackString } from "../layer";
-import apiManager from "./mtproto/mtprotoworker";
 import stateStorage from "./stateStorage";
 import App from "../config/app";
 import rootScope from "./rootScope";
-import RichTextProcessor from "./richtextprocessor";
 import { IS_MOBILE } from "../environment/userAgent";
 import deepEqual from "../helpers/object/deepEqual";
 import safeAssign from "../helpers/object/safeAssign";
 import capitalizeFirstLetter from "../helpers/string/capitalizeFirstLetter";
+import matchUrlProtocol from "./richTextProcessor/matchUrlProtocol";
+import wrapUrl from "./richTextProcessor/wrapUrl";
 
 export const langPack: {[actionType: string]: LangPackKey} = {
   "messageActionChatCreate": "ActionCreateGroup",
@@ -64,7 +64,7 @@ export const langPack: {[actionType: string]: LangPackKey} = {
 	"messageActionGroupCall.ended_by": "Chat.Service.VoiceChatFinished",
 	"messageActionGroupCall.ended_byYou": "Chat.Service.VoiceChatFinishedYou",
 
-	"messageActionBotAllowed": "Chat.Service.BotPermissionAllowed"
+	"messageActionBotAllowed": "Chat.Service.BotPermissionAllowed",
 };
 
 export type LangPackKey = /* string |  */keyof typeof lang | keyof typeof langSign;
@@ -81,9 +81,16 @@ namespace I18n {
 
 	let cacheLangPackPromise: Promise<LangPackDifference>;
 	export let lastRequestedLangCode: string;
+  export let lastRequestedNormalizedLangCode: string;
 	export let lastAppliedLangCode: string;
 	export let requestedServerLanguage = false;
   export let timeFormat: State['settings']['timeFormat'];
+
+  function setLangCode(langCode: string) {
+    lastRequestedLangCode = langCode;
+    lastRequestedNormalizedLangCode = langCode.split('-')[0];
+  }
+
 	export function getCacheLangPack(): Promise<LangPackDifference> {
 		if(cacheLangPackPromise) return cacheLangPackPromise;
 		return cacheLangPackPromise = Promise.all([
@@ -99,7 +106,7 @@ namespace I18n {
 			} */
 			
 			if(!lastRequestedLangCode) {
-				lastRequestedLangCode = langPack.lang_code;
+        setLangCode(langPack.lang_code);
 			}
 			
 			applyLangPack(langPack);
@@ -138,7 +145,7 @@ namespace I18n {
     if(haveToUpdate) {
       cachedDateTimeFormats.clear();
       const elements = Array.from(document.querySelectorAll(`.i18n`)) as HTMLElement[];
-      elements.forEach(element => {
+      elements.forEach((element) => {
         const instance = weakMap.get(element);
 
         if(instance instanceof IntlDateElement) {
@@ -150,7 +157,7 @@ namespace I18n {
 
 	export function loadLocalLangPack() {
 		const defaultCode = App.langPackCode;
-		lastRequestedLangCode = defaultCode;
+    setLangCode(defaultCode);
 		return Promise.all([
 			import('../lang'),
 			import('../langSign'),
@@ -173,20 +180,21 @@ namespace I18n {
 		});
 	}
 
-	export function loadLangPack(langCode: string) {
+	export function loadLangPack(langCode: string, web?: boolean) {
 		requestedServerLanguage = true;
+    const managers = rootScope.managers;
 		return Promise.all([
-			apiManager.invokeApiCacheable('langpack.getLangPack', {
+			managers.apiManager.invokeApiCacheable('langpack.getLangPack', {
 				lang_code: langCode,
-				lang_pack: App.langPack
+				lang_pack: web ? 'web' : App.langPack
 			}),
-			apiManager.invokeApiCacheable('langpack.getLangPack', {
+			!web && managers.apiManager.invokeApiCacheable('langpack.getLangPack', {
 				lang_code: langCode,
 				lang_pack: 'android'
 			}),
 			import('../lang'),
 			import('../langSign'),
-			apiManager.invokeApiCacheable('help.getCountriesList', {
+			managers.apiManager.invokeApiCacheable('help.getCountriesList', {
 				lang_code: langCode,
 				hash: 0
 			}) as Promise<HelpCountriesList.helpCountriesList>,
@@ -195,7 +203,7 @@ namespace I18n {
 	}
 
 	export function getStrings(langCode: string, strings: string[]) {
-		return apiManager.invokeApi('langpack.getStrings', {
+		return rootScope.managers.apiManager.invokeApi('langpack.getStrings', {
 			lang_pack: App.langPack,
 			lang_code: langCode,
 			keys: strings
@@ -224,20 +232,16 @@ namespace I18n {
 		return pushTo;
 	}
 
-	export function getLangPack(langCode: string) {
-		lastRequestedLangCode = langCode;
-		return loadLangPack(langCode).then(([langPack1, langPack2, localLangPack1, localLangPack2, countries, _]) => {
+	export function getLangPack(langCode: string, web?: boolean) {
+    setLangCode(langCode);
+		return loadLangPack(langCode, web).then(([langPack1, langPack2, localLangPack1, localLangPack2, countries, _]) => {
 			let strings: LangPackString[] = [];
 
-			[localLangPack1, localLangPack2].forEach(l => {
+			[localLangPack1, localLangPack2].forEach((l) => {
 				formatLocalStrings(l.default as any, strings);
 			});
 
-			strings = strings.concat(langPack1.strings);
-
-			for(const string of langPack2.strings) {
-				strings.push(string);
-			}
+			strings = strings.concat(...[langPack1.strings, langPack2.strings].filter(Boolean));
 
 			langPack1.strings = strings;
 			langPack1.countries = countries;
@@ -265,7 +269,8 @@ namespace I18n {
 	})();
 	
 	export function applyLangPack(langPack: LangPackDifference) {
-		if(langPack.lang_code !== lastRequestedLangCode) {
+    const currentLangCode = lastRequestedLangCode;
+		if(langPack.lang_code !== currentLangCode) {
 			return;
 		}
 
@@ -273,11 +278,11 @@ namespace I18n {
 			if(langPack.lang_code === 'zh-hans-raw' || langPack.lang_code === 'zh-hant-raw') {
 				pluralRules = new Intl.PluralRules('zh-CN');
 			} else {
-				pluralRules = new Intl.PluralRules(langPack.lang_code);
+				pluralRules = new Intl.PluralRules(lastRequestedNormalizedLangCode);
 			}
 		} catch(err) {
 			console.error('pluralRules error', err);
-			pluralRules = new Intl.PluralRules(langPack.lang_code.split('-', 1)[0]);
+			pluralRules = new Intl.PluralRules(lastRequestedNormalizedLangCode.split('-', 1)[0]);
 		}
 
 		strings.clear();
@@ -290,7 +295,7 @@ namespace I18n {
 			countriesList.length = 0;
 			countriesList.push(...langPack.countries.countries);
 
-			langPack.countries.countries.forEach(country => {
+			langPack.countries.countries.forEach((country) => {
 				if(country.name) {
 					const langPackKey: any = country.default_name;
 					strings.set(langPackKey, {
@@ -302,15 +307,15 @@ namespace I18n {
 			});
 		}
 
-		if(lastAppliedLangCode !== langPack.lang_code) {
-			rootScope.dispatchEvent('language_change', langPack.lang_code);
-			lastAppliedLangCode = langPack.lang_code;
+		if(lastAppliedLangCode !== currentLangCode) {
+			rootScope.dispatchEvent('language_change', currentLangCode);
+			lastAppliedLangCode = currentLangCode;
       cachedDateTimeFormats.clear();
       updateAmPm();
 		}
 
 		const elements = Array.from(document.querySelectorAll(`.i18n`)) as HTMLElement[];
-		elements.forEach(element => {
+		elements.forEach((element) => {
 			const instance = weakMap.get(element);
 
 			if(instance) {
@@ -363,9 +368,9 @@ namespace I18n {
         
 				const url = p4.slice(idx + 2, p4.length - 1);
         let a: HTMLAnchorElement;
-				if(url && RichTextProcessor.matchUrlProtocol(url)) {
+				if(url && matchUrlProtocol(url)) {
           a = document.createElement('a');
-          const wrappedUrl = RichTextProcessor.wrapUrl(url);
+          const wrappedUrl = wrapUrl(url);
           a.href = wrappedUrl.url;
           if(wrappedUrl.onclick) a.setAttribute('onclick', wrappedUrl.onclick);
           a.target = '_blank';
@@ -417,7 +422,7 @@ namespace I18n {
 
     const result = superFormatter(input, args);
     if(plain) { // * let's try a hack now... (don't want to replace []() entity)
-      return result.map(item => item instanceof Node ? item.textContent : item).join('');
+      return result.map((item) => item instanceof Node ? item.textContent : item).join('');
     } else {
       return result;
     }
@@ -503,7 +508,7 @@ namespace I18n {
 
   const cachedDateTimeFormats: Map<string, Intl.DateTimeFormat> = new Map();
   function getDateTimeFormat(options: Intl.DateTimeFormatOptions = {}) {
-    let json = JSON.stringify(options);
+    const json = JSON.stringify(options);
     let dateTimeFormat = cachedDateTimeFormats.get(json);
     if(!dateTimeFormat) {
 	  const langRegex = /^[a-zA-Z]{2}-[a-zA-Z]{2}$/

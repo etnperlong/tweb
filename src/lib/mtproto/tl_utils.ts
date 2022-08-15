@@ -16,25 +16,14 @@ import bytesToHex from '../../helpers/bytes/bytesToHex';
 import isObject from '../../helpers/object/isObject';
 import gzipUncompress from '../../helpers/gzipUncompress';
 import bigInt from 'big-integer';
-import longFromInts from '../../helpers/long/longFromInts';
+import ulongFromInts from '../../helpers/long/ulongFromInts';
+import { safeBigInt } from '../../helpers/bigInt/bigIntConstants';
+import { bigIntToSigned, bigIntToUnsigned } from '../../helpers/bigInt/bigIntConversion';
 
-// @ts-ignore
-/* import {BigInteger} from 'jsbn';
-
-export function bigint(num: number) {
-  return new BigInteger(num.toString(16), 16);
-}
-
-function bigStringInt(strNum: string) {
-  return new BigInteger(strNum, 10)
-} */
-
-const boolFalse = +Schema.API.constructors.find(c => c.predicate === 'boolFalse').id;
-const boolTrue = +Schema.API.constructors.find(c => c.predicate === 'boolTrue').id;
-const vector = +Schema.API.constructors.find(c => c.predicate === 'vector').id;
-const gzipPacked = +Schema.MTProto.constructors.find(c => c.predicate === 'gzip_packed').id;
-
-//console.log('boolFalse', boolFalse === 0xbc799737);
+const boolFalse = +Schema.API.constructors.find((c) => c.predicate === 'boolFalse').id;
+const boolTrue = +Schema.API.constructors.find((c) => c.predicate === 'boolTrue').id;
+const vector = +Schema.API.constructors.find((c) => c.predicate === 'vector').id;
+const gzipPacked = +Schema.MTProto.constructors.find((c) => c.predicate === 'gzip_packed').id;
 
 class TLSerialization {
   private maxLength = 2048; // 2Kb
@@ -159,12 +148,9 @@ class TLSerialization {
         return this.storeIntBytes(sLong, 64, field);
       }
     }
-  
-    if(typeof sLong !== 'string') {
-      sLong = sLong ? sLong.toString() : '0';
-    }
 
-    const {quotient, remainder} = bigInt(sLong).divmod(0x100000000);
+    const _bigInt = bigIntToUnsigned(bigInt(sLong as string));
+    const {quotient, remainder} = _bigInt.divmod(0x100000000);
     const high = quotient.toJSNumber();
     const low = remainder.toJSNumber();
 
@@ -277,7 +263,7 @@ class TLSerialization {
   
   public storeMethod(methodName: string, params: any) {
     const schema = this.mtproto ? Schema.MTProto : Schema.API;
-    const methodData = schema.methods.find(m => m.method === methodName);
+    const methodData = schema.methods.find((m) => m.method === methodName);
 
     if(!methodData) {
       throw new Error('No method ' + methodName + ' found');
@@ -376,7 +362,7 @@ class TLSerialization {
     const schema = this.mtproto ? Schema.MTProto : Schema.API;
     const predicate = obj['_'];
     let isBare = false;
-    const constructorData: MTProtoConstructor = schema.constructors.find(c => c.predicate === predicate);
+    const constructorData: MTProtoConstructor = schema.constructors.find((c) => c.predicate === predicate);
   
     if(isBare = (type.charAt(0) === '%')) {
       type = type.substr(1);
@@ -506,23 +492,25 @@ class TLDeserialization<FetchLongAs extends Long> {
     return doubleView[0];
   }
   
+  // ! it should've been signed
   public fetchLong(field?: string): FetchLongAs {
     const iLow = this.readInt((field || '') + ':long[low]');
     const iHigh = this.readInt((field || '') + ':long[high]');
-  
-    //const longDec = bigint(iHigh).shiftLeft(32).add(bigint(iLow)).toString();
-    const longDec = longFromInts(iHigh, iLow);
+
+    let ulong = ulongFromInts(iHigh, iLow);
+    if(/* !unsigned &&  */!this.mtproto) { // make it signed
+      ulong = bigIntToSigned(ulong);
+    }
 
     if(!this.mtproto) {
-      const num = +longDec;
-      if(Number.isSafeInteger(num)) {
+      if(safeBigInt.greaterOrEquals(ulong.abs())) {
         // @ts-ignore
-        return num;
+        return ulong.toJSNumber();
       }
     }
   
     // @ts-ignore
-    return longDec;
+    return ulong.toString(10);
   }
   
   public fetchBool(field?: string): boolean {
@@ -691,12 +679,12 @@ class TLDeserialization<FetchLongAs extends Long> {
   
     if(type.charAt(0) === '%') {
       const checkType = type.substr(1);
-      constructorData = schema.constructors.find(c => c.type === checkType);
+      constructorData = schema.constructors.find((c) => c.type === checkType);
       if(!constructorData) {
         throw new Error('Constructor not found for type: ' + type);
       }
     }/*  else if(type.charAt(0) >= 97 && type.charAt(0) <= 122) {
-      constructorData = schema.constructors.find(c => c.predicate === type);
+      constructorData = schema.constructors.find((c) => c.predicate === type);
       if(!constructorData) {
         throw new Error('Constructor not found for predicate: ' + type);
       }

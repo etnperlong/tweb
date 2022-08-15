@@ -25,7 +25,16 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-img, video {
+button {
+  background: none;
+	outline: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+img, 
+video {
   -webkit-user-drag: none;
 }
 
@@ -153,6 +162,10 @@ Utility Classes
 
 .pre-wrap {
   white-space: pre-wrap !important;
+}
+
+.no-wrap {
+  white-space: nowrap !important;
 }
 
 .no-border-radius {

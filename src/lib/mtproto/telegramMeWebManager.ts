@@ -12,7 +12,8 @@
 import App from "../../config/app";
 import { MOUNT_CLASS_TO } from "../../config/debug";
 import Modes from "../../config/modes";
-import { tsNow } from "../../helpers/date";
+import loadScript from "../../helpers/dom/loadScript";
+import tsNow from "../../helpers/tsNow";
 import sessionStorage from '../sessionStorage';
 
 export class TelegramMeWebManager {
@@ -25,10 +26,11 @@ export class TelegramMeWebManager {
 
     return sessionStorage.get('tgme_sync').then((curValue) => {
       const ts = tsNow(true);
-      if(canRedirect &&
-        curValue &&
-        curValue.canRedirect === canRedirect &&
-        (curValue.ts + 86400) > ts) {
+      if(
+        canRedirect &&
+        curValue?.canRedirect === canRedirect &&
+        (curValue.ts + 86400) > ts
+      ) {
         return;
       }
 
@@ -45,17 +47,10 @@ export class TelegramMeWebManager {
         '//t.me/' + path
       ];
 
-      const promises = urls.map(url => {
-        const script = document.createElement('script');
-        const promise = new Promise<void>((resolve) => {
-          script.onload = script.onerror = () => {
-            script.remove();
-            resolve();
-          };
+      const promises = urls.map((url) => {
+        return loadScript(url).then((script) => {
+          script.remove();
         });
-        script.src = url;
-        document.body.appendChild(script);
-        return promise;
       });
 
       return Promise.all(promises);

@@ -4,7 +4,7 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
-import { IS_TOUCH_SUPPORTED } from "../environment/touchSupport";
+import IS_TOUCH_SUPPORTED from "../environment/touchSupport";
 import { logger, LogTypes } from "../lib/logger";
 import fastSmoothScroll, { ScrollOptions } from "../helpers/fastSmoothScroll";
 import useHeavyAnimationCheck from "../hooks/useHeavyAnimationCheck";
@@ -21,7 +21,7 @@ console.log(height);
 */
 
 /*
-Array.from($0.querySelectorAll('.bubble-content')).forEach(_el => {
+Array.from($0.querySelectorAll('.bubble-content')).forEach((_el) => {
 	//_el.style.display = '';	
 	//return;
 
@@ -35,7 +35,7 @@ Array.from($0.querySelectorAll('.bubble-content')).forEach(_el => {
 */
 
 /* const scrollables: Map<HTMLElement, Scrollable> = new Map();
-const scrollsIntersector = new IntersectionObserver(entries => {
+const scrollsIntersector = new IntersectionObserver((entries) => {
   for(let entry of entries) {
     const scrollable = scrollables.get(entry.target as HTMLElement);
 
@@ -81,7 +81,7 @@ export class ScrollableBase {
     this.log = logger('SCROLL' + (logPrefix ? '-' + logPrefix : ''), LogTypes.Error);
 
     if(el) {
-      Array.from(el.children).forEach(c => this.container.append(c));
+      Array.from(el.children).forEach((c) => this.container.append(c));
 
       el.append(this.container);
     }
@@ -143,6 +143,13 @@ export class ScrollableBase {
     this.removeHeavyAnimationListener = undefined;
   }
 
+  public destroy() {
+    this.removeListeners();
+    this.onAdditionalScroll = undefined;
+    this.onScrolledTop = undefined;
+    this.onScrolledBottom = undefined;
+  }
+
   public append(element: HTMLElement) {
     this.container.append(element);
   }
@@ -160,7 +167,7 @@ export class ScrollableBase {
       //this.log('onScroll call', this.onScrollMeasure);
     //}
 
-    //return;
+    // return;
 
     if(this.isHeavyAnimationInProgress) {
       this.cancelMeasure();
@@ -172,7 +179,8 @@ export class ScrollableBase {
     if((!this.onScrolledTop && !this.onScrolledBottom) && !this.splitUp && !this.onAdditionalScroll) return;
     if(this.onScrollMeasure) return;
     // if(this.onScrollMeasure) window.cancelAnimationFrame(this.onScrollMeasure);
-    this.onScrollMeasure = window.requestAnimationFrame(() => {
+    // this.onScrollMeasure = window.requestAnimationFrame(() => {
+    this.onScrollMeasure = window.setTimeout(() => {
       this.onScrollMeasure = 0;
 
       const scrollPosition = this.container[this.scrollProperty];
@@ -187,12 +195,14 @@ export class ScrollableBase {
       if(this.checkForTriggers) {
         this.checkForTriggers();
       }
-    });
+    // });
+    }, 200);
   };
 
   public cancelMeasure() {
     if(this.onScrollMeasure) {
-      window.cancelAnimationFrame(this.onScrollMeasure);
+      // window.cancelAnimationFrame(this.onScrollMeasure);
+      clearTimeout(this.onScrollMeasure);
       this.onScrollMeasure = 0;
     }
   }
@@ -212,7 +222,7 @@ export default class Scrollable extends ScrollableBase {
     /* if(withPaddingContainer) {
       this.padding = document.createElement('div');
       this.padding.classList.add('scrollable-padding');
-      Array.from(this.container.children).forEach(c => this.padding.append(c));
+      Array.from(this.container.children).forEach((c) => this.padding.append(c));
       this.container.append(this.padding);
     } */
 

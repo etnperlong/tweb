@@ -7,10 +7,8 @@
 import { copyTextToClipboard } from "../../../helpers/clipboard";
 import { randomLong } from "../../../helpers/random";
 import { Chat, ChatFull, ExportedChatInvite } from "../../../layer";
-import appChatsManager from "../../../lib/appManagers/appChatsManager";
-import appProfileManager from "../../../lib/appManagers/appProfileManager";
 import Button from "../../button";
-import { setButtonLoader } from "../../misc";
+import { setButtonLoader } from "../../putPreloader";
 import RadioField from "../../radioField";
 import Row, { RadioFormFromRows } from "../../row";
 import { SettingSection } from "../../sidebarLeft";
@@ -29,10 +27,10 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
   public chatId: ChatId;
   public chatFull: ChatFull;
 
-  protected init() {
+  protected async init() {
     this.container.classList.add('edit-peer-container', 'group-type-container');
 
-    const isBroadcast = appChatsManager.isBroadcast(this.chatId);
+    const isBroadcast = await this.managers.appChatsManager.isBroadcast(this.chatId);
 
     this.setTitle(isBroadcast ? 'ChannelType' : 'GroupType');
 
@@ -67,7 +65,7 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
       onChange();
     });
 
-    const chat: Chat = appChatsManager.getChat(this.chatId);
+    const chat: Chat = await this.managers.appChatsManager.getChat(this.chatId);
 
     section.content.append(form);
 
@@ -80,7 +78,8 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
       clickable: () => {
         copyTextToClipboard((this.chatFull.exported_invite as ExportedChatInvite.chatInviteExported).link);
         toast(I18n.format('LinkCopied', true));
-      }
+      },
+      listenerSetter: this.listenerSetter
     });
 
     const btnRevoke = Button('btn-primary btn-transparent danger', {icon: 'delete', text: 'RevokeLink'});
@@ -92,7 +91,7 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
           callback: () => {
             const toggle = toggleDisability([btnRevoke], true);
             
-            appProfileManager.getChatInviteLink(this.chatId, true).then(link => {
+            this.managers.appProfileManager.getChatInviteLink(this.chatId, true).then((link) => {
               toggle();
               linkRow.title.innerHTML = link;
               //revoked = true;
@@ -134,7 +133,7 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
       onChange: onChange,
       peerId: this.chatId.toPeerId(true),
       head: placeholder
-    });
+    }, this.managers);
 
     const originalValue = placeholder + ((chat as Chat.channel).username || '');
 
@@ -147,8 +146,8 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
     attachClickEvent(applyBtn, () => {
       /* const unsetLoader =  */setButtonLoader(applyBtn);
       const username = publicRow.radioField.checked ? linkInputField.getValue() : '';
-      appChatsManager.migrateChat(this.chatId).then(channelId => {
-        return appChatsManager.updateUsername(channelId, username);
+      this.managers.appChatsManager.migrateChat(this.chatId).then((channelId) => {
+        return this.managers.appChatsManager.updateUsername(channelId, username);
       }).then(() => {
         //unsetLoader();
         this.close();
@@ -173,7 +172,7 @@ export default class AppChatTypeTab extends SliderSuperTabEventable {
 
       this.listenerSetter.add(checkboxField.input)('change', () => {
         const toggle = checkboxField.toggleDisability(true);
-        appChatsManager.toggleNoForwards(this.chatId, checkboxField.checked).then(() => {
+        this.managers.appChatsManager.toggleNoForwards(this.chatId, checkboxField.checked).then(() => {
           toggle();
         });
       });

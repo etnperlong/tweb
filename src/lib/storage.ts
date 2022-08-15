@@ -10,8 +10,10 @@
  */
 
 import { Database } from "../config/databases";
+import { MOUNT_CLASS_TO } from "../config/debug";
 //import DATABASE_SESSION from "../config/databases/session";
 import deferredPromise, { CancellablePromise } from "../helpers/cancellablePromise";
+import { IS_WORKER } from "../helpers/context";
 import throttle from "../helpers/schedulers/throttle";
 //import { WorkerTaskTemplate } from "../types";
 import IDBStorage from "./idb";
@@ -35,7 +37,13 @@ export interface LocalStorageProxyDeleteTask extends WorkerTaskTemplate {
   }
 }; */
 
-export default class AppStorage<Storage extends Record<string, any>, T extends Database<any>/* Storage extends {[name: string]: any} *//* Storage extends Record<string, any> */> {
+const THROTTLE_TIME = 16;
+
+/* Storage extends {[name: string]: any} *//* Storage extends Record<string, any> */
+export default class AppStorage<
+  Storage extends Record<string, any>, 
+  T extends Database<any>
+> {
   private static STORAGES: AppStorage<any, Database<any>>[] = [];
   private storage: IDBStorage<T>;//new CacheStorageController('session');
 
@@ -70,19 +78,19 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
 
     this.saveThrottled = throttle(async() => {
       const deferred = this.saveDeferred;
-      this.saveDeferred = deferredPromise<void>();
+      this.saveDeferred = deferredPromise();
 
       const set = this.keysToSet;
       if(set.size) {
         const keys = Array.from(set.values()) as string[];
         set.clear();
 
+        const values = keys.map((key) => this.cache[key]);
         try {
           //console.log('setItem: will set', key/* , value */);
           //await this.cacheStorage.delete(key); // * try to prevent memory leak in Chrome leading to 'Unexpected internal error.'
           //await this.storage.save(key, new Response(value, {headers: {'Content-Type': 'application/json'}}));
 
-          const values = keys.map(key => this.cache[key]);
           /* if(db === DATABASE_SESSION && !('localStorage' in self)) { // * support legacy Webogram's localStorage
             self.postMessage({
               type: 'localStorageProxy', 
@@ -98,7 +106,7 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
           //console.log('setItem: have set', key/* , value */);
         } catch(e) {
           //this.useCS = false;
-          console.error('[AS]: set error:', e, keys/* , value */);
+          console.error('[AS]: set error:', e, keys, values);
         }
       }
 
@@ -107,11 +115,11 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
       if(set.size) {
         this.saveThrottled();
       }
-    }, 16, false);
+    }, THROTTLE_TIME, false);
 
     this.deleteThrottled = throttle(async() => {
       const deferred = this.deleteDeferred;
-      this.deleteDeferred = deferredPromise<void>();
+      this.deleteDeferred = deferredPromise();
 
       const set = this.keysToDelete;
       if(set.size) {
@@ -140,13 +148,13 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
       if(set.size) {
         this.deleteThrottled();
       }
-    }, 16, false);
+    }, THROTTLE_TIME, false);
 
     this.getThrottled = throttle(async() => {
       const keys = Array.from(this.getPromises.keys());
 
       // const perf = performance.now();
-      this.storage.get(keys as string[]).then(values => {
+      this.storage.get(keys as string[]).then((values) => {
         for(let i = 0, length = keys.length; i < length; ++i) {
           const key = keys[i];
           const deferred = this.getPromises.get(key);
@@ -178,7 +186,7 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
           this.getThrottled();
         }
       });
-    }, 16, false);
+    }, THROTTLE_TIME, false);
   }
 
   public isAvailable() {
@@ -284,10 +292,14 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
     return this.storage.clear().catch(noop);
   }
 
-  public static toggleStorage(enabled: boolean) {
-    return Promise.all(this.STORAGES.map(storage => {
+  public static toggleStorage(enabled: boolean, clearWrite: boolean) {
+    return Promise.all(this.STORAGES.map((storage) => {
       storage.useStorage = enabled;
       
+      if(!IS_WORKER || !clearWrite) {
+        return;
+      }
+
       if(!enabled) {
         storage.keysToSet.clear();
         storage.keysToDelete.clear();
@@ -301,14 +313,18 @@ export default class AppStorage<Storage extends Record<string, any>, T extends D
   }
 
   public static freezeSaving<T extends Database<any>>(callback: () => any, names: T['stores'][number]['name'][]) {
-    this.STORAGES.forEach(storage => storage.savingFreezed = true);
+    this.STORAGES.forEach((storage) => storage.savingFreezed = true);
     try {
       callback();
-    } catch(err) {}
-    this.STORAGES.forEach(storage => storage.savingFreezed = false);
+    } catch(err) {
+      console.error('freezeSaving callback error:', err);
+    }
+    this.STORAGES.forEach((storage) => storage.savingFreezed = false);
   }
 
   /* public deleteDatabase() {
     return IDBStorage.deleteDatabase().catch(noop);
   } */
 }
+
+MOUNT_CLASS_TO && (MOUNT_CLASS_TO.AppStorage = AppStorage);

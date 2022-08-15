@@ -4,7 +4,7 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
-import { IS_TOUCH_SUPPORTED } from "../../environment/touchSupport";
+import IS_TOUCH_SUPPORTED from "../../environment/touchSupport";
 import { IS_MOBILE, IS_SAFARI } from "../../environment/userAgent";
 import assumeType from "../../helpers/assumeType";
 import callbackify from "../../helpers/callbackify";
@@ -15,7 +15,7 @@ import { getMiddleware } from "../../helpers/middleware";
 import noop from "../../helpers/noop";
 import { fastRaf } from "../../helpers/schedulers";
 import { Message, AvailableReaction } from "../../layer";
-import type { AppReactionsManager } from "../../lib/appManagers/appReactionsManager";
+import { AppManagers } from "../../lib/appManagers/managers";
 import lottieLoader from "../../lib/rlottie/lottieLoader";
 import RLottiePlayer from "../../lib/rlottie/rlottiePlayer";
 import rootScope from "../../lib/rootScope";
@@ -26,9 +26,9 @@ import { wrapSticker } from "../wrappers";
 const REACTIONS_CLASS_NAME = 'btn-menu-reactions';
 const REACTION_CLASS_NAME = REACTIONS_CLASS_NAME + '-reaction';
 
-const REACTION_SIZE = 28;
+const REACTION_SIZE = 26;
 const PADDING = 4;
-const REACTION_CONTAINER_SIZE = REACTION_SIZE + PADDING * 2;
+export const REACTION_CONTAINER_SIZE = REACTION_SIZE + PADDING * 2;
 
 const CAN_USE_TRANSFORM = !IS_SAFARI;
 
@@ -41,15 +41,15 @@ type ChatReactionsMenuPlayers = {
 };
 export class ChatReactionsMenu {
   public widthContainer: HTMLElement;
-  private container: HTMLElement;
+  public container: HTMLElement;
   private reactionsMap: Map<HTMLElement, ChatReactionsMenuPlayers>;
-  private scrollable: ScrollableBase;
+  public scrollable: ScrollableBase;
   private animationGroup: string;
   private middleware: ReturnType<typeof getMiddleware>;
   private message: Message.message;
 
   constructor(
-    private appReactionsManager: AppReactionsManager,
+    private managers: AppManagers,
     private type: 'horizontal' | 'vertical',
     middleware: ChatReactionsMenu['middleware']
   ) {
@@ -67,11 +67,11 @@ export class ChatReactionsMenu {
 
     reactionsScrollable.container.classList.add('no-scrollbar');
 
-    ['big'].forEach(type => {
-      const bubble = document.createElement('div');
-      bubble.classList.add(REACTIONS_CLASS_NAME + '-bubble', REACTIONS_CLASS_NAME + '-bubble-' + type);
-      reactionsContainer.append(bubble);
-    });
+    // ['big'].forEach((type) => {
+    //   const bubble = document.createElement('div');
+    //   bubble.classList.add(REACTIONS_CLASS_NAME + '-bubble', REACTIONS_CLASS_NAME + '-bubble-' + type);
+    //   reactionsContainer.append(bubble);
+    // });
 
     this.reactionsMap = new Map();
     this.animationGroup = 'CHAT-MENU-REACTIONS-' + Date.now();
@@ -88,7 +88,7 @@ export class ChatReactionsMenu {
       const players = this.reactionsMap.get(reactionDiv);
       if(!players) return;
 
-      this.appReactionsManager.sendReaction(this.message, players.reaction);
+      this.managers.appReactionsManager.sendReaction(this.message, players.reaction);
     });
 
     widthContainer.append(reactionsContainer);
@@ -101,10 +101,10 @@ export class ChatReactionsMenu {
 
     const middleware = this.middleware.get();
     // const result = Promise.resolve(this.appReactionsManager.getAvailableReactionsForPeer(message.peerId)).then((res) => pause(1000).then(() => res));
-    const result = this.appReactionsManager.getAvailableReactionsByMessage(message);
+    const result = this.managers.appReactionsManager.getAvailableReactionsByMessage(message);
     callbackify(result, (reactions) => {
       if(!middleware() || !reactions.length) return;
-      reactions.forEach(reaction => {
+      reactions.forEach((reaction) => {
         this.renderReaction(reaction);
       });
 
@@ -192,7 +192,7 @@ export class ChatReactionsMenu {
         div: appearWrapper,
         play: true,
         ...options
-      }).then(player => {
+      }).then(({render}) => render).then((player) => {
         assumeType<RLottiePlayer>(player);
   
         players.appear = player;
@@ -217,7 +217,7 @@ export class ChatReactionsMenu {
         doc: reaction.select_animation,
         div: selectWrapper,
         ...options
-      }).then(player => {
+      }).then(({render}) => render).then((player) => {
         assumeType<RLottiePlayer>(player);
 
         return lottieLoader.waitForFirstFrame(player);

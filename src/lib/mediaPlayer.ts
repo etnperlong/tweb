@@ -6,19 +6,20 @@
 
 import appMediaPlaybackController from "../components/appMediaPlaybackController";
 import { IS_APPLE_MOBILE, IS_MOBILE } from "../environment/userAgent";
-import { IS_TOUCH_SUPPORTED } from "../environment/touchSupport";
-import { onMediaLoad } from "../helpers/files";
+import IS_TOUCH_SUPPORTED from "../environment/touchSupport";
 import cancelEvent from "../helpers/dom/cancelEvent";
 import ListenerSetter, { Listener } from "../helpers/listenerSetter";
 import ButtonMenu from "../components/buttonMenu";
 import { ButtonMenuToggleHandler } from "../components/buttonMenuToggle";
-import rootScope from "./rootScope";
 import ControlsHover from "../helpers/dom/controlsHover";
 import { addFullScreenListener, cancelFullScreen, isFullScreen, requestFullScreen } from "../helpers/dom/fullScreen";
 import toHHMMSS from "../helpers/string/toHHMMSS";
 import MediaProgressLine from "../components/mediaProgressLine";
 import VolumeSelector from "../components/volumeSelector";
 import debounce from "../helpers/schedulers/debounce";
+import overlayCounter from "../helpers/overlayCounter";
+import onMediaLoad from "../helpers/onMediaLoad";
+import { attachClickEvent } from "../helpers/dom/clickEvent";
 
 export default class VideoPlayer extends ControlsHover {
   private static PLAYBACK_RATES = [0.5, 1, 1.5, 2];
@@ -96,7 +97,6 @@ export default class VideoPlayer extends ControlsHover {
       }).finally(() => { // due to autoplay, play will not call
         this.wrapper.classList.toggle('is-playing', !this.video.paused);
       });
-      //(this.wrapper.querySelector('.toggle') as HTMLButtonElement).click();
     }
   }
 
@@ -126,15 +126,15 @@ export default class VideoPlayer extends ControlsHover {
       leftControls.insertBefore(volumeSelector.btn, timeElapsed.parentElement);
 
       Array.from(toggle).forEach((button) => {
-        listenerSetter.add(button)('click', () => {
+        attachClickEvent(button, () => {
           this.togglePlay();
-        });
+        }, {listenerSetter: this.listenerSetter});
       });
 
       if(this.pipButton) {
-        listenerSetter.add(this.pipButton)('click', () => {
+        attachClickEvent(this.pipButton, () => {
           this.video.requestPictureInPicture();
-        });
+        }, {listenerSetter: this.listenerSetter});
 
         const onPip = (pip: boolean) => {
           this.wrapper.style.visibility = pip ? 'hidden': '';
@@ -169,12 +169,12 @@ export default class VideoPlayer extends ControlsHover {
       }
 
       if(!IS_TOUCH_SUPPORTED) {
-        listenerSetter.add(video)('click', () => {
+        attachClickEvent(video, () => {
           this.togglePlay();
-        });
+        }, {listenerSetter: this.listenerSetter});
 
         listenerSetter.add(document)('keydown', (e: KeyboardEvent) => {
-          if(rootScope.overlaysActive > 1 || document.pictureInPictureElement === video) { // forward popup is active, etc
+          if(overlayCounter.overlaysActive > 1 || document.pictureInPictureElement === video) { // forward popup is active, etc
             return;
           }
 
@@ -215,9 +215,9 @@ export default class VideoPlayer extends ControlsHover {
         }
       });
 
-      listenerSetter.add(fullScreenButton)('click', () => {
+      attachClickEvent(fullScreenButton, () => {
         this.toggleFullScreen();
-      });
+      }, {listenerSetter: this.listenerSetter});
 
       addFullScreenListener(wrapper, this.onFullScreen.bind(this, fullScreenButton), listenerSetter);
 
@@ -239,7 +239,7 @@ export default class VideoPlayer extends ControlsHover {
         this.showControls(false);
       });
 
-      listenerSetter.add(rootScope)('media_playback_params', () => {
+      listenerSetter.add(appMediaPlaybackController)('playbackParams', () => {
         this.setPlaybackRateIcon();
       });
     }

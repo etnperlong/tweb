@@ -4,20 +4,20 @@
  * https://github.com/morethanwords/tweb/blob/master/LICENSE
  */
 
+import contextMenuController from "../helpers/contextMenuController";
 import cancelEvent from "../helpers/dom/cancelEvent";
-import { AttachClickOptions, attachClickEvent, CLICK_EVENT_NAME } from "../helpers/dom/clickEvent";
+import { AttachClickOptions, attachClickEvent } from "../helpers/dom/clickEvent";
+import findUpClassName from "../helpers/dom/findUpClassName";
 import ListenerSetter from "../helpers/listenerSetter";
 import { FormatterArguments, i18n, LangPackKey } from "../lib/langPack";
 import CheckboxField from "./checkboxField";
-import { closeBtnMenu } from "./misc";
-import ripple from "./ripple";
 
 export type ButtonMenuItemOptions = {
   icon?: string, 
   text?: LangPackKey, 
   textArgs?: FormatterArguments,
   regularText?: string, 
-  onClick: (e: MouseEvent | TouchEvent) => void | boolean, 
+  onClick: (e: MouseEvent | TouchEvent) => void | boolean | any, 
   element?: HTMLElement,
   textElement?: HTMLElement,
   options?: AttachClickOptions,
@@ -33,7 +33,7 @@ const ButtonMenuItem = (options: ButtonMenuItemOptions) => {
   const {icon, text, onClick, checkboxField, noCheckboxClickListener} = options;
   const el = document.createElement('div');
   el.className = 'btn-menu-item rp-overflow' + (icon ? ' tgico-' + icon : '');
-  ripple(el);
+  // ripple(el);
 
   let textElement = options.textElement;
   if(!textElement) {
@@ -49,6 +49,12 @@ const ButtonMenuItem = (options: ButtonMenuItemOptions) => {
   // * cancel mobile keyboard close
   onClick && attachClickEvent(el, /* CLICK_EVENT_NAME !== 'click' || keepOpen ? */ (e) => {
     cancelEvent(e);
+
+    const menu = findUpClassName(e.target, 'btn-menu');
+    if(menu && !menu.classList.contains('active')) {
+      return;
+    }
+    
     const result = onClick(e);
 
     if(result === false) {
@@ -56,7 +62,7 @@ const ButtonMenuItem = (options: ButtonMenuItemOptions) => {
     }
 
     if(!keepOpen) {
-      closeBtnMenu();
+      contextMenuController.closeBtnMenu();
     }
 
     if(checkboxField && !noCheckboxClickListener/*  && result !== false */) {
@@ -76,7 +82,7 @@ const ButtonMenu = (buttons: ButtonMenuItemOptions[], listenerSetter?: ListenerS
   el.classList.add('btn-menu');
 
   if(listenerSetter) {
-    buttons.forEach(b => {
+    buttons.forEach((b) => {
       if(b.options) {
         b.options.listenerSetter = listenerSetter;
       } else {
